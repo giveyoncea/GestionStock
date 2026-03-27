@@ -1,100 +1,177 @@
 ﻿@page "/ventes"
 @page "/commercial/ventes"
+@page "/ventes/nouveau"
+@page "/commercial/ventes/nouveau"
+@page "/ventes/consultation/{DocumentId:guid}"
+@page "/commercial/ventes/consultation/{DocumentId:guid}"
+@page "/ventes/reglement/{ReglementDocumentId:guid}"
+@page "/commercial/ventes/reglement/{ReglementDocumentId:guid}"
 @attribute [Authorize]
 @inject IApiService Api
 @inject ICurrencyService Devise
+@inject IPrintService PrintService
+@inject NavigationManager Nav
 
 <PageTitle>Documents de vente - GestionStock</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Documents de vente</h1>
-        <p class="page-date">Consultation, validation et suivi des statuts</p>
-    </div>
-    <div class="header-actions">
-        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau document</button>
-    </div>
-</div>
+<div class="workspace-window-shell">
+    <section class="workspace-window @(ventesPageMinimized ? "workspace-window--minimized" : null) @(ventesPageMaximized ? "workspace-window--maximized" : null) @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window--child-open" : null)">
+        <header class="workspace-window-header">
+            <div>
+                <h1 class="workspace-window-title">Documents de vente</h1>
+                <p class="workspace-window-subtitle">Consultation, validation et suivi des statuts</p>
+            </div>
+            <div class="workspace-window-controls">
+                <button type="button" class="workspace-window-btn" title="Réduire" @onclick="ToggleVentesPage">−</button>
+                <button type="button" class="workspace-window-btn" title="@(ventesPageMaximized ? "Restaurer" : "Agrandir")" @onclick="ToggleVentesPageMaximized">@(ventesPageMaximized ? "❐" : "□")</button>
+                <button type="button" class="workspace-window-btn workspace-window-btn--close" title="Fermer" @onclick="FermerVentesPage">×</button>
+            </div>
+        </header>
 
-@if (!string.IsNullOrWhiteSpace(message))
-{
-    <div class="@msgCls">@message</div>
-}
+        @if (!ventesPageMinimized)
+        {
+            <div class="workspace-window-toolbar">
+                <div class="header-actions">
+                    <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau document</button>
+                </div>
+            </div>
 
-@if (chargement)
-{
-    <div class="loading-state"><div class="spinner-lg"></div></div>
-}
-else
-{
-    <div class="table-container">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>No</th>
-                    <th>Type</th>
-                    <th>Client</th>
-                    <th>Date</th>
-                    <th class="text-right">Total TTC</th>
-                    <th>Statut</th>
-                    <th>Consultation</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var d in documents)
+            <div class="workspace-window-body ventes-page-body @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window-body--dimmed" : null)">
+                @if (!string.IsNullOrWhiteSpace(message))
                 {
-                    <tr @ondblclick="() => VoirDetail(d)" style="cursor:pointer">
-                        <td @ondblclick:stopPropagation="false"><button type="button" class="btn-link-like" @onclick="() => VoirDetail(d)"><code>@d.Numero</code></button></td>
-                        <td @ondblclick="() => VoirDetail(d)">@d.TypeLibelle</td>
-                        <td @ondblclick="() => VoirDetail(d)">@d.ClientNom</td>
-                        <td @ondblclick="() => VoirDetail(d)">@d.DateDocument.ToString("dd/MM/yyyy")</td>
-                        <td class="text-right mono" @ondblclick="() => VoirDetail(d)">@Montant(d.MontantTTC)</td>
-                        <td @ondblclick="() => VoirDetail(d)"><span class="badge @GetStatutBadge(d.Statut)">@d.StatutLibelle</span></td>
-                        <td><button type="button" class="btn-secondary" @onclick:stopPropagation="true" @onclick="() => VoirDetail(d)">Consulter</button></td>
-                        <td class="actions-cell">
-                            <details class="row-actions-menu row-actions--mobile">
-                                <summary class="btn-row-action btn-row-action--soft">Actions</summary>
-                                <div class="row-actions-menu-list">
-                                    @if (PeutModifier(d))
-                                    {
-                                        <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick:stopPropagation="true" @onclick="() => OuvrirEdition(d)">Modifier</button>
-                                    }
-                                    @if (d.Statut == 1)
-                                    {
-                                        <button class="btn-row-action btn-row-action--success" title="Valider" @onclick:stopPropagation="true" @onclick="() => Valider(d)">Valider</button>
-                                    }
-                                    @if (d.TypeDocument == 4 && d.Solde > 0 && d.Statut != 5 && d.Statut != 10)
-                                    {
-                                        <button class="btn-row-action btn-row-action--success" title="Encaisser" @onclick:stopPropagation="true" @onclick="() => OuvrirReglement(d)">Encaisser</button>
-                                    }
-                                    @if (d.Statut == 4)
-                                    {
-                                        <button class="btn-row-action btn-row-action--warn" title="Comptabiliser" @onclick:stopPropagation="true" @onclick="() => Comptabiliser(d)">Comptabiliser</button>
-                                    }
-                                    @if (d.Statut != 5 && d.Statut != 10)
-                                    {
-                                        <button class="btn-row-action btn-row-action--danger" title="Annuler" @onclick:stopPropagation="true" @onclick="() => Annuler(d)">Annuler</button>
-                                    }
-                                </div>
-                            </details>
-                        </td>
-                    </tr>
+                    <div class="@msgCls">@message</div>
                 }
-            </tbody>
-        </table>
-    </div>
-}
+
+                @if (chargement)
+                {
+                    <div class="loading-state"><div class="spinner-lg"></div></div>
+                }
+                else
+                {
+                    <div class="ventes-table-shell">
+                        <div class="ventes-table-meta">
+                            <div class="text-muted">@(documents.Count) document(s)</div>
+                            <div class="ventes-page-size">
+                                <label class="field-label" for="ventes-page-size">Lignes par page</label>
+                                <select id="ventes-page-size" class="field-input" value="@pageSize" @onchange="ChangerTaillePage">
+                                    @foreach (var size in pageSizeOptions)
+                                    {
+                                        <option value="@size">@size</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="table-container ventes-table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>No</th>
+                                        <th>Type</th>
+                                        <th>Client</th>
+                                        <th>Date</th>
+                                        <th class="text-right">Total TTC</th>
+                                        <th class="text-right">Montant regle</th>
+                                        <th>Statut</th>
+                                        <th>Consultation</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var d in DocumentsPage)
+                                    {
+                                        <tr class="@(openActionsDocumentId == d.Id ? "ventes-row ventes-row--actions-open" : "ventes-row")" @ondblclick="() => VoirDetail(d)" style="cursor:pointer">
+                                            <td @ondblclick:stopPropagation="false"><button type="button" class="btn-link-like" @onclick="() => VoirDetail(d)"><code>@d.Numero</code></button></td>
+                                            <td @ondblclick="() => VoirDetail(d)">@d.TypeLibelle</td>
+                                            <td @ondblclick="() => VoirDetail(d)">@d.ClientNom</td>
+                                            <td @ondblclick="() => VoirDetail(d)">@d.DateDocument.ToString("dd/MM/yyyy")</td>
+                                            <td class="text-right mono" @ondblclick="() => VoirDetail(d)">@Montant(d.MontantTTC)</td>
+                                            <td class="text-right mono" @ondblclick="() => VoirDetail(d)">@Montant(d.MontantRegle)</td>
+                                            <td @ondblclick="() => VoirDetail(d)"><span class="badge @GetStatutBadge(d.Statut)">@d.StatutLibelle</span></td>
+                                            <td><button type="button" class="btn-secondary" @onclick:stopPropagation="true" @onclick="() => VoirDetail(d)">Consulter</button></td>
+                                            <td class="actions-cell ventes-actions-cell @(openActionsDocumentId == d.Id ? "ventes-actions-cell--open" : null)">
+                                                @if (HasActions(d))
+                                                {
+                                                    <div class="ventes-actions-dropdown">
+                                                        <button type="button"
+                                                                class="btn-row-action btn-row-action--soft ventes-actions-trigger @((openActionsDocumentId.HasValue && openActionsDocumentId != d.Id) ? "ventes-actions-trigger--hidden" : null)"
+                                                                @onclick:stopPropagation="true"
+                                                                @onclick="() => ToggleActionsMenu(d.Id)">
+                                                            Actions
+                                                        </button>
+                                                        @if (openActionsDocumentId == d.Id)
+                                                        {
+                                                            <div class="ventes-actions-panel">
+                                                                @if (PeutModifier(d))
+                                                                {
+                                                                    <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await OuvrirEdition(d); }">Modifier</button>
+                                                                }
+                                                                @if (d.Statut == 1)
+                                                                {
+                                                                    <button class="btn-row-action btn-row-action--success" title="Valider" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Valider(d); }">Valider</button>
+                                                                }
+                                                                @if (d.TypeDocument == 4 && d.Solde > 0 && d.Statut != 5 && d.Statut != 10)
+                                                                {
+                                                                    <button class="btn-row-action btn-row-action--success" title="Encaisser" @onclick:stopPropagation="true" @onclick="() => { CloseActionsMenu(); OuvrirReglement(d); }">Encaisser</button>
+                                                                }
+                                                                @if (d.Statut == 4)
+                                                                {
+                                                                    <button class="btn-row-action btn-row-action--warn" title="Comptabiliser" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Comptabiliser(d); }">Comptabiliser</button>
+                                                                }
+                                                                <button class="btn-row-action btn-row-action--print" title="Imprimer" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Imprimer(d); }">Imprimer</button>
+                                                                @if (d.Statut != 5 && d.Statut != 10)
+                                                                {
+                                                                    <button class="btn-row-action btn-row-action--danger" title="Annuler" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Annuler(d); }">Annuler</button>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">—</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="ventes-table-footer">
+                            <div class="text-muted">@PaginationResume</div>
+                            <div class="pager-controls">
+                                <button type="button" class="btn-secondary" @onclick="PagePrecedente" disabled="@(currentPage <= 1)">Précédent</button>
+                                <span class="pager-indicator">Page @currentPage / @TotalPages</span>
+                                <button type="button" class="btn-secondary" @onclick="PageSuivante" disabled="@(currentPage >= TotalPages)">Suivant</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
 
 @if (showForm)
 {
-    <div class="modal-overlay" @onclick="FermerForm">
-        <div class="modal modal-lg" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h2>@(editId.HasValue ? $"Modifier {editNumero}" : "+ Nouveau document")</h2>
-                <button class="btn-close" @onclick="FermerForm">x</button>
+    <div class="sales-window-shell">
+        <div class="sales-window sales-window--form @(showFormMinimized ? "sales-window--minimized" : null)">
+            <div class="sales-window-header">
+                <div class="sales-window-title-block">
+                    <h2 class="sales-window-title">@(editId.HasValue ? $"Modifier {editNumero}" : "Nouveau document de vente")</h2>
+                    <span class="sales-window-subtitle">Saisie, edition et preparation du document</span>
+                </div>
+                <div class="sales-window-controls">
+                    <button type="button" class="sales-window-control" title="Réduire" @onclick="ToggleFormMinimized">−</button>
+                    <button type="button" class="sales-window-control sales-window-control--close" title="Fermer" @onclick="FermerForm">×</button>
+                </div>
             </div>
-            <div class="modal-body">
+            <div class="sales-window-body">
+                @if (showFormMinimized)
+                {
+                    <div class="sales-window-minimized-note">Fenêtre réduite. Cliquez sur − pour la réouvrir.</div>
+                }
+                else
+                {
                 <div class="form-grid">
                     <div class="field-group">
                         <label class="field-label">Type *</label>
@@ -192,11 +269,15 @@ else
                         </table>
                     </div>
                 </div>
+                }
             </div>
-            <div class="modal-footer">
+            @if (!showFormMinimized)
+            {
+            <div class="sales-window-footer">
                 <button class="btn-secondary" @onclick="FermerForm">Annuler</button>
                 <button class="btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer")</button>
             </div>
+            }
         </div>
     </div>
 }
@@ -246,13 +327,25 @@ else
 
 @if (showDetail && detailDoc != null)
 {
-    <div class="modal-overlay" @onclick="FermerDetail">
-        <div class="modal modal-lg" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h2>Consultation - @detailDoc.Numero</h2>
-                <button class="btn-close" @onclick="FermerDetail">x</button>
+    <div class="sales-window-shell">
+        <div class="sales-window sales-window--detail @(showDetailMinimized ? "sales-window--minimized" : null)">
+            <div class="sales-window-header">
+                <div class="sales-window-title-block">
+                    <h2 class="sales-window-title">Consultation - @detailDoc.Numero</h2>
+                    <span class="sales-window-subtitle">Ventes / Consultation</span>
+                </div>
+                <div class="sales-window-controls">
+                    <button type="button" class="sales-window-control" title="Réduire" @onclick="ToggleDetailMinimized">−</button>
+                    <button type="button" class="sales-window-control sales-window-control--close" title="Fermer" @onclick="FermerDetail">×</button>
+                </div>
             </div>
-            <div class="modal-body">
+            <div class="sales-window-body">
+                @if (showDetailMinimized)
+                {
+                    <div class="sales-window-minimized-note">Fenêtre réduite. Cliquez sur − pour la réouvrir.</div>
+                }
+                else
+                {
                 <div class="form-grid">
                     <div class="field-group"><label class="field-label">Type</label><div class="field-input">@detailDoc.TypeLibelle</div></div>
                     <div class="field-group"><label class="field-label">Statut</label><div class="field-input">@detailDoc.StatutLibelle</div></div>
@@ -276,35 +369,58 @@ else
                         </tbody>
                     </table>
                 </div>
+                }
             </div>
-            <div class="modal-footer"><button class="btn-secondary" @onclick="FermerDetail">Fermer</button></div>
+            @if (!showDetailMinimized)
+            {
+            <div class="sales-window-footer"><button class="btn-secondary" @onclick="FermerDetail">Fermer</button></div>
+            }
         </div>
     </div>
 }
 
 @if (showReglement && selectedDoc != null)
 {
-    <div class="modal-overlay" @onclick="() => showReglement = false">
-        <div class="modal" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h2>RÃ¨glement - @selectedDoc.Numero</h2>
-                <button class="btn-close" @onclick="() => showReglement = false">x</button>
+    <div class="sales-window-shell">
+        <div class="sales-window sales-window--reglement @(showReglementMinimized ? "sales-window--minimized" : null)">
+            <div class="sales-window-header">
+                <div class="sales-window-title-block">
+                    <h2 class="sales-window-title">Règlement - @selectedDoc.Numero</h2>
+                    <span class="sales-window-subtitle">Ventes / Encaissement</span>
+                </div>
+                <div class="sales-window-controls">
+                    <button type="button" class="sales-window-control" title="Réduire" @onclick="ToggleReglementMinimized">−</button>
+                    <button type="button" class="sales-window-control sales-window-control--close" title="Fermer" @onclick="FermerReglement">×</button>
+                </div>
             </div>
-            <div class="modal-body">
+            <div class="sales-window-body">
+                @if (showReglementMinimized)
+                {
+                    <div class="sales-window-minimized-note">Fenêtre réduite. Cliquez sur − pour la réouvrir.</div>
+                }
+                else
+                {
                 <div class="field-group">
                     <label class="field-label">Montant</label>
                     <input class="field-input" type="number" step="@Devise.AmountStep" @bind="reglementMontant" />
                 </div>
+                }
             </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" @onclick="() => showReglement = false">Annuler</button>
+            @if (!showReglementMinimized)
+            {
+            <div class="sales-window-footer">
+                <button class="btn-secondary" @onclick="FermerReglement">Annuler</button>
                 <button class="btn-primary" @onclick="Encaisser">Enregistrer</button>
             </div>
+            }
         </div>
     </div>
 }
 
 @code {
+    [Parameter] public Guid? DocumentId { get; set; }
+    [Parameter] public Guid? ReglementDocumentId { get; set; }
+
     private List<DocumentVenteDto> documents = new();
     private List<ClientDto> clients = new();
     private List<ArticleDto> articles = new();
@@ -316,7 +432,13 @@ else
     private bool showForm;
     private bool showDetail;
     private bool showReglement;
+    private bool ventesPageMinimized;
+    private bool ventesPageMaximized;
+    private bool showFormMinimized;
+    private bool showDetailMinimized;
+    private bool showReglementMinimized;
     private bool showQuickClient;
+    private Guid? openActionsDocumentId;
     private Guid? editId;
     private string editNumero = "";
     private DocumentVenteDto? selectedDoc;
@@ -338,11 +460,21 @@ else
     private string clientSearch = "";
     private string selectedClientLabel = "";
     private List<ClientDto> filteredClients = new();
+    private bool dataLoaded;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private readonly int[] pageSizeOptions = [10, 20, 50, 100];
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        await Devise.EnsureLoadedAsync();
-        await Recharger();
+        if (!dataLoaded)
+        {
+            await Devise.EnsureLoadedAsync();
+            await Recharger();
+            dataLoaded = true;
+        }
+
+        await SynchroniserDepuisRouteAsync();
     }
 
     private async Task Recharger()
@@ -352,10 +484,16 @@ else
         clients = await Api.GetClientsAsync() ?? new();
         var art = await Api.GetArticlesAsync(1, 500, null, null);
         articles = art?.Items.ToList() ?? new();
+        AssurerPaginationValide();
         chargement = false;
     }
 
     private void OuvrirCreation()
+    {
+        Nav.NavigateTo("/commercial/ventes/nouveau");
+    }
+
+    private void OuvrirCreationInterne()
     {
         editId = null;
         editNumero = "";
@@ -369,6 +507,8 @@ else
         fFraisLivraison = 0;
         fAcompte = 0;
         lignes = new() { new LigneDocRequest { TauxTVA = 20 } };
+        showFormMinimized = false;
+        showDetail = false;
         showForm = true;
     }
 
@@ -397,11 +537,48 @@ else
             TauxTVA = l.TauxTVA,
             NumeroLot = l.NumeroLot
         }).ToList();
+        showFormMinimized = false;
         showForm = true;
     }
 
-    private void FermerForm() => showForm = false;
-    private void FermerDetail() => showDetail = false;
+    private void FermerForm()
+    {
+        if (EstRouteCreation())
+        {
+            Nav.NavigateTo("/commercial/ventes");
+            return;
+        }
+
+        FermerFormInterne();
+    }
+    private void FermerDetail()
+    {
+        if (EstRouteConsultation())
+        {
+            Nav.NavigateTo("/commercial/ventes");
+            return;
+        }
+
+        FermerDetailInterne();
+    }
+    private void FermerReglement()
+    {
+        if (EstRouteReglement())
+        {
+            Nav.NavigateTo("/commercial/ventes");
+            return;
+        }
+
+        FermerReglementInterne();
+    }
+    private void ToggleVentesPage() => ventesPageMinimized = !ventesPageMinimized;
+    private void ToggleVentesPageMaximized() => ventesPageMaximized = !ventesPageMaximized;
+    private void FermerVentesPage() => Nav.NavigateTo("/commercial/dashboard");
+    private void ToggleFormMinimized() => showFormMinimized = !showFormMinimized;
+    private void ToggleDetailMinimized() => showDetailMinimized = !showDetailMinimized;
+    private void ToggleReglementMinimized() => showReglementMinimized = !showReglementMinimized;
+    private void ToggleActionsMenu(Guid id) => openActionsDocumentId = openActionsDocumentId == id ? null : id;
+    private void CloseActionsMenu() => openActionsDocumentId = null;
     private void OuvrirCreationClientRapide()
     {
         quickClientNom = string.IsNullOrWhiteSpace(clientSearch) ? "" : clientSearch;
@@ -443,6 +620,12 @@ else
         selectedClientLabel = "";
         filteredClients = new();
     }
+    private bool HasActions(DocumentVenteDto d) =>
+        PeutModifier(d)
+        || d.Statut == 1
+        || (d.TypeDocument == 4 && d.Solde > 0 && d.Statut != 5 && d.Statut != 10)
+        || d.Statut == 4
+        || (d.Statut != 5 && d.Statut != 10);
     private static bool PeutModifier(DocumentVenteDto d) => d.Statut == 1 && !d.EstVerrouille && d.TypeDocument != 3;
     private void AjouterLigne() => lignes.Add(new LigneDocRequest { TauxTVA = 20 });
     private void SupprimerLigne(int index) { if (index >= 0 && index < lignes.Count) lignes.RemoveAt(index); }
@@ -481,15 +664,20 @@ else
         message = result?.Message;
         if (result?.Succes == true)
         {
-            showForm = false;
+            if (EstRouteCreation())
+            {
+                Nav.NavigateTo("/commercial/ventes");
+                return;
+            }
+
+            FermerFormInterne();
             await Recharger();
         }
     }
 
-    private async Task VoirDetail(DocumentVenteDto document)
+    private void VoirDetail(DocumentVenteDto document)
     {
-        detailDoc = await Api.GetVenteAsync(document.Id);
-        showDetail = detailDoc != null;
+        Nav.NavigateTo($"/commercial/ventes/consultation/{document.Id}");
     }
 
     private async Task CreerClientRapide()
@@ -537,6 +725,21 @@ else
         await Recharger();
     }
 
+    private async Task Imprimer(DocumentVenteDto document)
+    {
+        var detail = await Api.GetVenteAsync(document.Id);
+        var parametres = await Api.GetParametresAsync();
+        if (detail == null || parametres == null)
+        {
+            msgCls = "alert-error";
+            message = "Impossible de preparer l'impression du document.";
+            return;
+        }
+
+        await Devise.EnsureLoadedAsync();
+        await PrintService.PrintDocumentVenteAsync(detail, parametres, Devise);
+    }
+
     private async Task Annuler(DocumentVenteDto document)
     {
         var result = await Api.AnnulerVenteAsync(document.Id);
@@ -547,9 +750,7 @@ else
 
     private void OuvrirReglement(DocumentVenteDto document)
     {
-        selectedDoc = document;
-        reglementMontant = document.Solde;
-        showReglement = true;
+        Nav.NavigateTo($"/commercial/ventes/reglement/{document.Id}");
     }
 
     private async Task Encaisser()
@@ -558,7 +759,14 @@ else
         var result = await Api.AjouterReglementVenteAsync(selectedDoc.Id, new ReglementRequest { Montant = reglementMontant, ModeReglement = 1, DateReglement = DateTime.Today });
         msgCls = result?.Succes == true ? "alert-success" : "alert-error";
         message = result?.Message;
-        showReglement = false;
+        if (EstRouteReglement())
+        {
+            await Recharger();
+            Nav.NavigateTo("/commercial/ventes");
+            return;
+        }
+
+        FermerReglementInterne();
         await Recharger();
     }
 
@@ -574,5 +782,162 @@ else
     };
 
     private string Montant(decimal value) => Devise.FormatAmount(value);
+
+    private IEnumerable<DocumentVenteDto> DocumentsPage =>
+        documents
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize);
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(documents.Count / (double)pageSize));
+
+    private string PaginationResume
+    {
+        get
+        {
+            if (documents.Count == 0)
+                return "Aucun document";
+
+            var debut = ((currentPage - 1) * pageSize) + 1;
+            var fin = Math.Min(currentPage * pageSize, documents.Count);
+            return $"{debut}-{fin} sur {documents.Count}";
+        }
+    }
+
+    private void AssurerPaginationValide()
+    {
+        if (currentPage < 1)
+            currentPage = 1;
+
+        if (currentPage > TotalPages)
+            currentPage = TotalPages;
+    }
+
+    private void ChangerTaillePage(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newSize) && pageSizeOptions.Contains(newSize))
+        {
+            pageSize = newSize;
+            currentPage = 1;
+            AssurerPaginationValide();
+        }
+    }
+
+    private void PagePrecedente()
+    {
+        if (currentPage > 1)
+            currentPage--;
+    }
+
+    private void PageSuivante()
+    {
+        if (currentPage < TotalPages)
+            currentPage++;
+    }
+
+    private bool EstRouteCreation()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/').ToLowerInvariant();
+        return path is "ventes/nouveau" or "commercial/ventes/nouveau";
+    }
+
+    private bool EstRouteConsultation() => DocumentId.HasValue;
+    private bool EstRouteReglement() => ReglementDocumentId.HasValue;
+
+    private void FermerFormInterne()
+    {
+        showForm = false;
+        showFormMinimized = false;
+    }
+
+    private void FermerDetailInterne()
+    {
+        showDetail = false;
+        showDetailMinimized = false;
+    }
+
+    private void FermerReglementInterne()
+    {
+        showReglement = false;
+        showReglementMinimized = false;
+    }
+
+    private async Task VoirDetailInterne(Guid id)
+    {
+        detailDoc = await Api.GetVenteAsync(id);
+        showDetailMinimized = false;
+        showReglement = false;
+        showForm = false;
+        showDetail = detailDoc != null;
+    }
+
+    private async Task OuvrirReglementInterne(Guid id)
+    {
+        var doc = documents.FirstOrDefault(d => d.Id == id);
+        if (doc == null)
+        {
+            var detail = await Api.GetVenteAsync(id);
+            if (detail == null)
+                return;
+
+            doc = new DocumentVenteDto
+            {
+                Id = detail.Id,
+                Numero = detail.Numero,
+                TypeDocument = detail.TypeDocument,
+                TypeLibelle = detail.TypeLibelle,
+                Statut = detail.Statut,
+                StatutLibelle = detail.StatutLibelle,
+                ClientId = detail.ClientId,
+                ClientNom = detail.ClientNom,
+                DateDocument = detail.DateDocument,
+                DateEcheance = detail.DateEcheance,
+                MontantHT = detail.MontantHT,
+                MontantTVA = detail.MontantTVA,
+                MontantTTC = detail.MontantTTC,
+                MontantRegle = detail.MontantRegle,
+                Solde = detail.MontantTTC - detail.MontantRegle,
+                FraisLivraison = detail.FraisLivraison,
+                MontantAcompte = detail.MontantAcompte,
+                EstVerrouille = detail.EstVerrouille
+            };
+        }
+
+        selectedDoc = doc;
+        reglementMontant = doc.Solde;
+        showReglementMinimized = false;
+        showForm = false;
+        showDetail = false;
+        showReglement = true;
+    }
+
+    private async Task SynchroniserDepuisRouteAsync()
+    {
+        if (EstRouteCreation())
+        {
+            OuvrirCreationInterne();
+            return;
+        }
+
+        if (EstRouteConsultation())
+        {
+            await VoirDetailInterne(DocumentId!.Value);
+            return;
+        }
+
+        if (EstRouteReglement())
+        {
+            await OuvrirReglementInterne(ReglementDocumentId!.Value);
+            return;
+        }
+
+        if (showDetail)
+            FermerDetailInterne();
+
+        if (showReglement)
+            FermerReglementInterne();
+
+        if (showForm && !editId.HasValue)
+            FermerFormInterne();
+    }
 }
 
