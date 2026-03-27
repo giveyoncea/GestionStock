@@ -1,0 +1,100 @@
+@page "/commercial/dashboard"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject NavigationManager Nav
+
+<PageTitle>Commercial - GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Gestion Commerciale</h1>
+        <p class="page-date">Tableau de bord du module commercial</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="AllerVersVentes">+ Nouveau document</button>
+    </div>
+</div>
+
+<div class="comm-tabs">
+    <NavLink class="comm-tab" href="commercial/dashboard" Match="NavLinkMatch.Prefix">Tableau de bord</NavLink>
+    <NavLink class="comm-tab" href="commercial/ventes">Ventes</NavLink>
+    <NavLink class="comm-tab" href="commercial/achats">Achats</NavLink>
+    <NavLink class="comm-tab" href="commercial/clients">Clients</NavLink>
+    <NavLink class="comm-tab" href="commercial/fournisseurs">Fournisseurs</NavLink>
+</div>
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else if (dash != null)
+{
+    <div class="stat-cards-grid" style="margin-top:16px">
+        <div class="stat-card stat-card--blue">
+            <div class="stat-icon">C</div>
+            <div class="stat-value">@dash.NbClients</div>
+            <div class="stat-label">Clients actifs</div>
+        </div>
+        <div class="stat-card stat-card--amber">
+            <div class="stat-icon">D</div>
+            <div class="stat-value">@dash.DevisOuverts</div>
+            <div class="stat-label">Devis ouverts</div>
+        </div>
+        <div class="stat-card stat-card--teal">
+            <div class="stat-icon">CO</div>
+            <div class="stat-value">@dash.CommandesEnCours</div>
+            <div class="stat-label">Commandes en cours</div>
+        </div>
+        <div class="stat-card stat-card--red">
+            <div class="stat-icon">F</div>
+            <div class="stat-value">@dash.FacturesNonReglees</div>
+            <div class="stat-label">Factures à encaisser</div>
+        </div>
+        <div class="stat-card stat-card--green">
+            <div class="stat-icon">CA</div>
+            <div class="stat-value">@dash.CaMois.ToString("N0") F</div>
+            <div class="stat-label">CA du mois</div>
+        </div>
+        <div class="stat-card @(dash.EncoursClient > 0 ? "stat-card--amber" : "stat-card--gray")">
+            <div class="stat-icon">EC</div>
+            <div class="stat-value">@dash.EncoursClient.ToString("N0") F</div>
+            <div class="stat-label">Encours clients</div>
+        </div>
+    </div>
+
+    <div class="cards-grid cards-grid--2" style="margin-top:24px">
+        <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/ventes")'>
+            <span class="feature-card-title">Ventes</span>
+            <span class="feature-card-subtitle">Devis, commandes, factures, avoirs</span>
+        </button>
+        <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/achats")'>
+            <span class="feature-card-title">Achats</span>
+            <span class="feature-card-subtitle">Demandes, commandes, receptions, factures</span>
+        </button>
+        <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/clients")'>
+            <span class="feature-card-title">Clients</span>
+            <span class="feature-card-subtitle">Tiers de vente et encours</span>
+        </button>
+        <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/fournisseurs")'>
+            <span class="feature-card-title">Fournisseurs</span>
+            <span class="feature-card-subtitle">Referentiel fournisseurs et suivi achats</span>
+        </button>
+    </div>
+}
+
+@code {
+    private CommercialDashboardDto? dash;
+    private bool chargement = true;
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        dash = await Api.GetCommercialDashboardAsync();
+        chargement = false;
+    }
+
+    private void AllerVersVentes()
+    {
+        Nav.NavigateTo("/commercial/ventes");
+    }
+}

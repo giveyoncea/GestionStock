@@ -1,14 +1,15 @@
 ﻿@page "/clients"
+@page "/commercial/clients"
 @attribute [Authorize]
 @inject IApiService Api
 @inject ICurrencyService Devise
 
-<PageTitle>Clients â€“ GestionStock</PageTitle>
+<PageTitle>Clients - GestionStock</PageTitle>
 
 <div class="page-header">
     <div>
         <h1 class="page-title">Clients</h1>
-        <p class="page-date">Tiers vente â€” @clients.Count client(s)</p>
+        <p class="page-date">Tiers de vente · @clients.Count client(s)</p>
     </div>
     <div class="header-actions">
         <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau client</button>
@@ -19,8 +20,8 @@
 
 <div class="toolbar">
     <div class="search-box">
-        <span class="search-icon">ðŸ”</span>
-        <input class="search-input" type="text" placeholder="Nom, code, emailâ€¦"
+        <span class="search-icon">🔍</span>
+        <input class="search-input" type="text" placeholder="Nom, code, email..."
                @bind="recherche" @bind:event="oninput" />
     </div>
     <div class="toolbar-right">
@@ -36,7 +37,7 @@ else
             <thead><tr>
                 <th>Code</th><th>Client</th><th>Type</th>
                 <th>Email</th><th>Ville</th>
-                <th class="text-right">Remise</th><th class="text-right">DÃ©lai</th>
+                <th class="text-right">Remise</th><th class="text-right">Délai</th>
                 <th class="text-right">Encours</th><th></th>
             </tr></thead>
             <tbody>
@@ -64,17 +65,17 @@ else
             </tbody>
         </table>
     </div>
-    @if (!clients.Any()) { <div class="empty-state">Aucun client. CrÃ©ez votre premier client.</div> }
+    @if (!clients.Any()) { <div class="empty-state">Aucun client. Créez votre premier client.</div> }
 }
 
-@* â”€â”€â”€ MODAL CRÃ‰ATION / Ã‰DITION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* MODAL CREATION / EDITION *@
 @if (showModal)
 {
     <div class="modal-overlay" @onclick="() => showModal = false">
         <div class="modal modal-lg" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>@(clientEdite==null ? "+ Nouveau client" : "âœŽ " + clientEdite.RaisonSociale)</h2>
-                <button class="btn-close" @onclick="() => showModal = false">âœ•</button>
+                <h2>@(clientEdite==null ? "+ Nouveau client" : "Modifier " + clientEdite.RaisonSociale)</h2>
+                <button class="btn-close" @onclick="() => showModal = false">×</button>
             </div>
             <div class="modal-body">
                 <div class="form-grid">
@@ -94,7 +95,7 @@ else
                         <input class="field-input" type="email" @bind="fEmail" />
                     </div>
                     <div class="field-group">
-                        <label class="field-label">TÃ©lÃ©phone</label>
+                        <label class="field-label">Téléphone</label>
                         <input class="field-input" @bind="fTel" />
                     </div>
                     <div class="field-group">
@@ -112,7 +113,7 @@ else
                     @if (fType == 2)
                     {
                         <div class="field-group">
-                            <label class="field-label">NÂ° TVA</label>
+                            <label class="field-label">N° TVA</label>
                             <input class="field-input" @bind="fTva" placeholder="FR00000000000" />
                         </div>
                         <div class="field-group">
@@ -125,7 +126,7 @@ else
                         <input class="field-input" type="number" step="0.01" @bind="fRemise" />
                     </div>
                     <div class="field-group">
-                        <label class="field-label">DÃ©lai paiement (j)</label>
+                        <label class="field-label">Délai paiement (j)</label>
                         <input class="field-input" type="number" @bind="fDelai" />
                     </div>
                     <div class="field-group">
@@ -149,7 +150,7 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showModal = false">Annuler</button>
                 <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">
-                    @(saving ? "Enregistrementâ€¦" : clientEdite==null ? "CrÃ©er" : "Modifier")
+                    @(saving ? "Enregistrement..." : clientEdite==null ? "Créer" : "Modifier")
                 </button>
             </div>
         </div>
@@ -200,8 +201,8 @@ else
 
     private void VoirDocuments(ClientDto c)
     {
-        // Navigation vers ventes filtrÃ©es par client
-        message = $"Affichage des documents de {c.RaisonSociale} â€” accÃ©dez Ã  Ventes pour voir ses documents.";
+        // Navigation vers ventes filtrées par client
+        message = $"Affichage des documents de {c.RaisonSociale} : accédez à Ventes pour voir ses documents.";
         msgCls = "alert-success";
     }
 

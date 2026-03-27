@@ -135,9 +135,25 @@
             </button>
             <div class="nav-accordion-body @(sections["commercial"] ? "expanded" : "")">
                 <div class="nav-accordion-inner">
-                    <NavLink class="nav-item" href="commercial" @onclick="CloseSidebar">
+                    <NavLink class="nav-item" href="commercial/dashboard" @onclick="CloseSidebar">
                         <span class="nav-icon">C</span>
-                        <span>Espace commercial</span>
+                        <span>Tableau de bord commercial</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="commercial/ventes" @onclick="CloseSidebar">
+                        <span class="nav-icon">V</span>
+                        <span>Ventes</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="commercial/achats" @onclick="CloseSidebar">
+                        <span class="nav-icon">A</span>
+                        <span>Achats</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="commercial/clients" @onclick="CloseSidebar">
+                        <span class="nav-icon">C</span>
+                        <span>Clients</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="commercial/fournisseurs" @onclick="CloseSidebar">
+                        <span class="nav-icon">F</span>
+                        <span>Fournisseurs</span>
                     </NavLink>
                     <NavLink class="nav-item" href="commercial/reglements" @onclick="CloseSidebar">
                         <span class="nav-icon">R</span>

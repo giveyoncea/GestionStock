@@ -1,12 +1,13 @@
 ﻿@page "/commandes"
+@page "/commercial/achats"
 @attribute [Authorize]
 @inject IApiService Api
 @inject ICurrencyService Devise
 
-<PageTitle>Commandes d'achat - GestionStock</PageTitle>
+<PageTitle>Achats - GestionStock</PageTitle>
 
 <div class="page-header">
-    <h1 class="page-title">Commandes d'achat</h1>
+    <h1 class="page-title">Achats</h1>
     <button class="btn-primary" @onclick="OuvrirCreation">+ Nouvelle commande</button>
 </div>
 

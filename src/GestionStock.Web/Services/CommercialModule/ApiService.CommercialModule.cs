@@ -31,11 +31,12 @@ public partial class ApiService
 
     public async Task<DocumentVenteDetailDto?> GetVenteAsync(Guid id)
     {
-        var envelope = await GetAsync<DocumentDetailEnvelope<DocumentVenteDetailDto>>($"api/commercial/ventes/{id}");
-        if (envelope?.Document == null)
+        var document = await GetDocumentDetailAsync<DocumentVenteDetailDto>($"api/commercial/ventes/{id}");
+        if (document == null)
             return null;
-        envelope.Document.Lignes = envelope.Lignes ?? new();
-        return envelope.Document;
+
+        document.Lignes ??= new();
+        return document;
     }
 
     public Task<ResultDto?> CreerVenteAsync(DocumentVenteRequest dto)
@@ -86,11 +87,12 @@ public partial class ApiService
 
     public async Task<DocumentAchatDetailDto?> GetAchatCommAsync(Guid id)
     {
-        var envelope = await GetAsync<DocumentDetailEnvelope<DocumentAchatDetailDto>>($"api/commercial/achats/{id}");
-        if (envelope?.Document == null)
+        var document = await GetDocumentDetailAsync<DocumentAchatDetailDto>($"api/commercial/achats/{id}");
+        if (document == null)
             return null;
-        envelope.Document.Lignes = envelope.Lignes ?? new();
-        return envelope.Document;
+
+        document.Lignes ??= new();
+        return document;
     }
 
     public Task<ResultDto?> CreerAchatCommAsync(DocumentAchatRequest dto)

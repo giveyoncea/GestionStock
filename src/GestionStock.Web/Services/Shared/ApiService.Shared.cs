@@ -54,6 +54,32 @@ public partial class ApiService : IApiService
         }
     }
 
+    private async Task<TDocument?> GetDocumentDetailAsync<TDocument>(string url)
+        where TDocument : class
+    {
+        try
+        {
+            await SetAuthHeaderAsync();
+            var response = await _http.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+                return default;
+
+            var content = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(content))
+                return default;
+
+            var envelope = JsonSerializer.Deserialize<DocumentDetailEnvelope<TDocument>>(content, JsonOpts);
+            if (envelope?.Document != null)
+                return envelope.Document;
+
+            return JsonSerializer.Deserialize<TDocument>(content, JsonOpts);
+        }
+        catch
+        {
+            return default;
+        }
+    }
+
     private async Task<ResultDto?> PostAsync<TReq>(string url, TReq body)
     {
         try

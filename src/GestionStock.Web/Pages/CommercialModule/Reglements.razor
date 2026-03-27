@@ -1,9 +1,18 @@
 ﻿@page "/reglements"
 @page "/commercial/reglements"
+@page "/reglements/encaissements"
+@page "/commercial/reglements/encaissements"
+@page "/reglements/decaissements"
+@page "/commercial/reglements/decaissements"
+@page "/reglements/acomptes-clients"
+@page "/commercial/reglements/acomptes-clients"
+@page "/reglements/acomptes-fournisseurs"
+@page "/commercial/reglements/acomptes-fournisseurs"
 @attribute [Authorize]
 @inject IApiService Api
 @inject IPrintService PrintService
 @inject ICurrencyService CurrencyService
+@inject NavigationManager Nav
 
 <PageTitle>Règlements & acomptes - GestionStock</PageTitle>
 
@@ -28,18 +37,18 @@
 
 @* â”€â”€ Onglets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
 <div class="comm-tabs">
-    <button class="comm-tab @(onglet=="regl-clients"?"comm-tab--active":"")" @onclick="SetOngletReglClients">
+    <NavLink class="comm-tab" ActiveClass="comm-tab--active" href="/commercial/reglements/encaissements">
         Encaissements clients
-    </button>
-    <button class="comm-tab @(onglet=="regl-fourn"?"comm-tab--active":"")" @onclick="SetOngletReglFourn">
+    </NavLink>
+    <NavLink class="comm-tab" ActiveClass="comm-tab--active" href="/commercial/reglements/decaissements">
         Décaissements fournisseurs
-    </button>
-    <button class="comm-tab @(onglet=="acomptes-clients"?"comm-tab--active":"")" @onclick="SetOngletAcomptesClients">
+    </NavLink>
+    <NavLink class="comm-tab" ActiveClass="comm-tab--active" href="/commercial/reglements/acomptes-clients">
         Acomptes clients
-    </button>
-    <button class="comm-tab @(onglet=="acomptes-fourn"?"comm-tab--active":"")" @onclick="SetOngletAcomptesFourn">
+    </NavLink>
+    <NavLink class="comm-tab" ActiveClass="comm-tab--active" href="/commercial/reglements/acomptes-fournisseurs">
         Acomptes fournisseurs
-    </button>
+    </NavLink>
 </div>
 
 @* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -397,14 +406,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(
-            ChargerReglClients(),
-            Task.Run(async () => clients = await Api.GetClientsAsync() ?? new()),
-            Task.Run(async () => {
-                var r = await Api.GetFournisseursAsync(1, 500);
-                fournisseurs = r?.Items.ToList() ?? new();
-            })
-        );
+        await ChargerReferentielsAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await SynchroniserOngletDepuisRouteAsync();
     }
 
     // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -427,6 +434,52 @@
     {
         onglet = "acomptes-fourn";
         await ChargerAcomptesFourn();
+    }
+
+    private async Task ChargerReferentielsAsync()
+    {
+        await Task.WhenAll(
+            Task.Run(async () => clients = await Api.GetClientsAsync() ?? new()),
+            Task.Run(async () =>
+            {
+                var r = await Api.GetFournisseursAsync(1, 500);
+                fournisseurs = r?.Items.ToList() ?? new();
+            })
+        );
+    }
+
+    private async Task SynchroniserOngletDepuisRouteAsync()
+    {
+        var route = Nav.ToBaseRelativePath(Nav.Uri).Trim('/').ToLowerInvariant();
+        var prochainOnglet = route switch
+        {
+            "commercial/reglements/decaissements" or "reglements/decaissements" => "regl-fourn",
+            "commercial/reglements/acomptes-clients" or "reglements/acomptes-clients" => "acomptes-clients",
+            "commercial/reglements/acomptes-fournisseurs" or "reglements/acomptes-fournisseurs" => "acomptes-fourn",
+            _ => "regl-clients"
+        };
+
+        onglet = prochainOnglet;
+
+        switch (prochainOnglet)
+        {
+            case "regl-fourn":
+                if (!reglFourn.Any())
+                    await ChargerReglFourn();
+                break;
+            case "acomptes-clients":
+                if (!acomptesClients.Any())
+                    await ChargerAcomptesClients();
+                break;
+            case "acomptes-fourn":
+                if (!acomptesFourn.Any())
+                    await ChargerAcomptesFourn();
+                break;
+            default:
+                if (!reglClients.Any())
+                    await ChargerReglClients();
+                break;
+        }
     }
 
     // â”€â”€ Chargement donnÃ©es â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
