@@ -1,0 +1,577 @@
+﻿@page "/ventes"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+
+<PageTitle>Documents de vente - GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Documents de vente</h1>
+        <p class="page-date">Consultation, validation et suivi des statuts</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau document</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Type</th>
+                    <th>Client</th>
+                    <th>Date</th>
+                    <th class="text-right">Total TTC</th>
+                    <th>Statut</th>
+                    <th>Consultation</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in documents)
+                {
+                    <tr @ondblclick="() => VoirDetail(d)" style="cursor:pointer">
+                        <td @ondblclick:stopPropagation="false"><button type="button" class="btn-link-like" @onclick="() => VoirDetail(d)"><code>@d.Numero</code></button></td>
+                        <td @ondblclick="() => VoirDetail(d)">@d.TypeLibelle</td>
+                        <td @ondblclick="() => VoirDetail(d)">@d.ClientNom</td>
+                        <td @ondblclick="() => VoirDetail(d)">@d.DateDocument.ToString("dd/MM/yyyy")</td>
+                        <td class="text-right mono" @ondblclick="() => VoirDetail(d)">@Montant(d.MontantTTC)</td>
+                        <td @ondblclick="() => VoirDetail(d)"><span class="badge @GetStatutBadge(d.Statut)">@d.StatutLibelle</span></td>
+                        <td><button type="button" class="btn-secondary" @onclick:stopPropagation="true" @onclick="() => VoirDetail(d)">Consulter</button></td>
+                        <td class="actions-cell">
+                            <details class="row-actions-menu row-actions--mobile">
+                                <summary class="btn-row-action btn-row-action--soft">Actions</summary>
+                                <div class="row-actions-menu-list">
+                                    @if (PeutModifier(d))
+                                    {
+                                        <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick:stopPropagation="true" @onclick="() => OuvrirEdition(d)">Modifier</button>
+                                    }
+                                    @if (d.Statut == 1)
+                                    {
+                                        <button class="btn-row-action btn-row-action--success" title="Valider" @onclick:stopPropagation="true" @onclick="() => Valider(d)">Valider</button>
+                                    }
+                                    @if (d.TypeDocument == 4 && d.Solde > 0 && d.Statut != 5 && d.Statut != 10)
+                                    {
+                                        <button class="btn-row-action btn-row-action--success" title="Encaisser" @onclick:stopPropagation="true" @onclick="() => OuvrirReglement(d)">Encaisser</button>
+                                    }
+                                    @if (d.Statut == 4)
+                                    {
+                                        <button class="btn-row-action btn-row-action--warn" title="Comptabiliser" @onclick:stopPropagation="true" @onclick="() => Comptabiliser(d)">Comptabiliser</button>
+                                    }
+                                    @if (d.Statut != 5 && d.Statut != 10)
+                                    {
+                                        <button class="btn-row-action btn-row-action--danger" title="Annuler" @onclick:stopPropagation="true" @onclick="() => Annuler(d)">Annuler</button>
+                                    }
+                                </div>
+                            </details>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (showForm)
+{
+    <div class="modal-overlay" @onclick="FermerForm">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@(editId.HasValue ? $"Modifier {editNumero}" : "+ Nouveau document")</h2>
+                <button class="btn-close" @onclick="FermerForm">x</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Type *</label>
+                        <select class="field-input" @bind="fType" disabled="@editId.HasValue">
+                            <option value="1">Devis</option>
+                            <option value="2">Commande client</option>
+                            <option value="4">Facture</option>
+                            <option value="5">Avoir client</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Client *</label>
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <input class="field-input" placeholder="Rechercher un client..." value="@clientSearch" @oninput="FiltrerClientsRecherche" />
+                                <button type="button" class="btn-secondary" @onclick="OuvrirCreationClientRapide">+ Client</button>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(selectedClientLabel))
+                            {
+                                <div class="tiers-selected-badge">
+                                    @selectedClientLabel
+                                    <button class="tiers-clear-btn" @onclick="EffacerClientSelection">x</button>
+                                </div>
+                            }
+                            @if (filteredClients.Any())
+                            {
+                                <div class="tiers-dropdown" style="position:static">
+                                    @foreach (var client in filteredClients.Take(6))
+                                    {
+                                        <button type="button" class="tiers-dropdown-item" @onclick="() => ChoisirClient(client)">
+                                            <span class="tiers-dd-rs">@client.RaisonSociale</span>
+                                            <span class="tiers-dd-sub">@client.Code @(string.IsNullOrWhiteSpace(client.Ville) ? "" : " - " + client.Ville)</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date</label>
+                        <input class="field-input" type="date" @bind="fDate" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">EchÃ©ance</label>
+                        <input class="field-input" type="date" @bind="fEcheance" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">@($"Frais livraison ({Devise.Symbol})")</label>
+                        <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fFraisLivraison" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">@($"Acompte ({Devise.Symbol})")</label>
+                        <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fAcompte" />
+                    </div>
+                </div>
+                <div style="margin-top:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <label class="field-label" style="margin:0">Lignes</label>
+                        <button class="btn-secondary" @onclick="AjouterLigne">+ Ligne</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" style="font-size:12px">
+                            <thead>
+                                <tr>
+                                    <th>Article</th>
+                                    <th>QtÃ©</th>
+                                    <th>PU HT</th>
+                                    <th>TVA%</th>
+                                    <th>Total TTC</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < lignes.Count; i++)
+                                {
+                                    var idx = i;
+                                    <tr>
+                                        <td>
+                                            <select class="field-input" @bind="lignes[idx].ArticleId" @bind:after="() => OnArticleChange(idx)">
+                                                <option value="">-</option>
+                                                @foreach (var a in articles)
+                                                {
+                                                    <option value="@a.Id">[@a.Code] @a.Designation</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td><input class="field-input" type="number" step="0.001" @bind="lignes[idx].Quantite" /></td>
+                                        <td><input class="field-input" type="number" step="@Devise.AmountStep" @bind="lignes[idx].PrixUnitaireHT" /></td>
+                                        <td><input class="field-input" type="number" step="0.1" @bind="lignes[idx].TauxTVA" /></td>
+                                        <td class="mono">@Montant(TotalLigne(lignes[idx]))</td>
+                                        <td><button class="btn-icon btn-icon-danger" @onclick="() => SupprimerLigne(idx)">X</button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="FermerForm">Annuler</button>
+                <button class="btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showQuickClient)
+{
+    <div class="modal-overlay" @onclick="FermerClientRapide">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Nouveau client</h2>
+                <button class="btn-close" @onclick="FermerClientRapide">x</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale *</label>
+                        <input class="field-input" @bind="quickClientNom" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email</label>
+                        <input class="field-input" type="email" @bind="quickClientEmail" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">TÃ©lÃ©phone</label>
+                        <input class="field-input" @bind="quickClientTel" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="quickClientVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Type</label>
+                        <select class="field-input" @bind="quickClientType">
+                            <option value="1">Particulier</option>
+                            <option value="2">Professionnel</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="FermerClientRapide">Annuler</button>
+                <button class="btn-primary" @onclick="CreerClientRapide" disabled="@saving">CrÃ©er et sÃ©lectionner</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showDetail && detailDoc != null)
+{
+    <div class="modal-overlay" @onclick="FermerDetail">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Consultation - @detailDoc.Numero</h2>
+                <button class="btn-close" @onclick="FermerDetail">x</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group"><label class="field-label">Type</label><div class="field-input">@detailDoc.TypeLibelle</div></div>
+                    <div class="field-group"><label class="field-label">Statut</label><div class="field-input">@detailDoc.StatutLibelle</div></div>
+                    <div class="field-group"><label class="field-label">Client</label><div class="field-input">@detailDoc.ClientNom</div></div>
+                    <div class="field-group"><label class="field-label">Date</label><div class="field-input">@detailDoc.DateDocument.ToString("dd/MM/yyyy")</div></div>
+                    <div class="field-group"><label class="field-label">Total TTC</label><div class="field-input">@Montant(detailDoc.MontantTTC)</div></div>
+                </div>
+                <div class="table-container" style="margin-top:16px">
+                    <table class="data-table">
+                        <thead><tr><th>Article</th><th>QtÃ©</th><th>PU HT</th><th>Total TTC</th></tr></thead>
+                        <tbody>
+                            @foreach (var ligne in detailDoc.Lignes.OrderBy(l => l.Ordre))
+                            {
+                                <tr>
+                                    <td>@ligne.Designation</td>
+                                    <td class="mono">@ligne.Quantite</td>
+                                    <td class="mono">@Montant(ligne.PrixUnitaireHT)</td>
+                                    <td class="mono">@Montant(ligne.MontantTTC)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn-secondary" @onclick="FermerDetail">Fermer</button></div>
+        </div>
+    </div>
+}
+
+@if (showReglement && selectedDoc != null)
+{
+    <div class="modal-overlay" @onclick="() => showReglement = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>RÃ¨glement - @selectedDoc.Numero</h2>
+                <button class="btn-close" @onclick="() => showReglement = false">x</button>
+            </div>
+            <div class="modal-body">
+                <div class="field-group">
+                    <label class="field-label">Montant</label>
+                    <input class="field-input" type="number" step="@Devise.AmountStep" @bind="reglementMontant" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showReglement = false">Annuler</button>
+                <button class="btn-primary" @onclick="Encaisser">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DocumentVenteDto> documents = new();
+    private List<ClientDto> clients = new();
+    private List<ArticleDto> articles = new();
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private bool showForm;
+    private bool showDetail;
+    private bool showReglement;
+    private bool showQuickClient;
+    private Guid? editId;
+    private string editNumero = "";
+    private DocumentVenteDto? selectedDoc;
+    private DocumentVenteDetailDto? detailDoc;
+
+    private int fType = 1;
+    private string fClientId = "";
+    private DateTime fDate = DateTime.Today;
+    private DateTime? fEcheance;
+    private decimal fFraisLivraison;
+    private decimal fAcompte;
+    private List<LigneDocRequest> lignes = new();
+    private decimal reglementMontant;
+    private string quickClientNom = "";
+    private string quickClientEmail = "";
+    private string quickClientTel = "";
+    private string quickClientVille = "";
+    private int quickClientType = 2;
+    private string clientSearch = "";
+    private string selectedClientLabel = "";
+    private List<ClientDto> filteredClients = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await Recharger();
+    }
+
+    private async Task Recharger()
+    {
+        chargement = true;
+        documents = await Api.GetVentesAsync() ?? new();
+        clients = await Api.GetClientsAsync() ?? new();
+        var art = await Api.GetArticlesAsync(1, 500, null, null);
+        articles = art?.Items.ToList() ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirCreation()
+    {
+        editId = null;
+        editNumero = "";
+        fType = 1;
+        fClientId = "";
+        clientSearch = "";
+        selectedClientLabel = "";
+        filteredClients = new();
+        fDate = DateTime.Today;
+        fEcheance = null;
+        fFraisLivraison = 0;
+        fAcompte = 0;
+        lignes = new() { new LigneDocRequest { TauxTVA = 20 } };
+        showForm = true;
+    }
+
+    private async Task OuvrirEdition(DocumentVenteDto document)
+    {
+        var data = await Api.GetVenteAsync(document.Id);
+        if (data == null) return;
+        editId = data.Id;
+        editNumero = data.Numero;
+        fType = data.TypeDocument;
+        fClientId = data.ClientId.ToString();
+        selectedClientLabel = data.ClientNom;
+        clientSearch = data.ClientNom;
+        filteredClients = new();
+        fDate = data.DateDocument;
+        fEcheance = data.DateEcheance;
+        fFraisLivraison = data.FraisLivraison;
+        fAcompte = data.MontantAcompte;
+        lignes = data.Lignes.Select(l => new LigneDocRequest
+        {
+            ArticleId = l.ArticleId,
+            Designation = l.Designation,
+            Quantite = l.Quantite,
+            PrixUnitaireHT = l.PrixUnitaireHT,
+            TauxRemise = l.TauxRemise,
+            TauxTVA = l.TauxTVA,
+            NumeroLot = l.NumeroLot
+        }).ToList();
+        showForm = true;
+    }
+
+    private void FermerForm() => showForm = false;
+    private void FermerDetail() => showDetail = false;
+    private void OuvrirCreationClientRapide()
+    {
+        quickClientNom = string.IsNullOrWhiteSpace(clientSearch) ? "" : clientSearch;
+        quickClientEmail = "";
+        quickClientTel = "";
+        quickClientVille = "";
+        quickClientType = 2;
+        showQuickClient = true;
+    }
+    private void FermerClientRapide() => showQuickClient = false;
+    private void FiltrerClientsRecherche(ChangeEventArgs e)
+    {
+        clientSearch = e.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(clientSearch))
+        {
+            filteredClients = clients.OrderBy(c => c.RaisonSociale).Take(6).ToList();
+            return;
+        }
+
+        filteredClients = clients
+            .Where(c => c.RaisonSociale.Contains(clientSearch, StringComparison.OrdinalIgnoreCase)
+                     || c.Code.Contains(clientSearch, StringComparison.OrdinalIgnoreCase)
+                     || (c.Email ?? string.Empty).Contains(clientSearch, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => c.RaisonSociale)
+            .Take(6)
+            .ToList();
+    }
+    private void ChoisirClient(ClientDto client)
+    {
+        fClientId = client.Id.ToString();
+        clientSearch = client.RaisonSociale;
+        selectedClientLabel = client.RaisonSociale;
+        filteredClients = new();
+    }
+    private void EffacerClientSelection()
+    {
+        fClientId = "";
+        clientSearch = "";
+        selectedClientLabel = "";
+        filteredClients = new();
+    }
+    private static bool PeutModifier(DocumentVenteDto d) => d.Statut == 1 && !d.EstVerrouille && d.TypeDocument != 3;
+    private void AjouterLigne() => lignes.Add(new LigneDocRequest { TauxTVA = 20 });
+    private void SupprimerLigne(int index) { if (index >= 0 && index < lignes.Count) lignes.RemoveAt(index); }
+
+    private void OnArticleChange(int index)
+    {
+        var article = articles.FirstOrDefault(a => a.Id == lignes[index].ArticleId);
+        if (article != null)
+        {
+            lignes[index].Designation = article.Designation;
+            lignes[index].PrixUnitaireHT = article.PrixAchat;
+            lignes[index].TauxTVA = 20;
+        }
+    }
+
+    private decimal TotalLigne(LigneDocRequest ligne) => ligne.Quantite * ligne.PrixUnitaireHT * (1 + ligne.TauxTVA / 100);
+
+    private async Task Enregistrer()
+    {
+        if (!Guid.TryParse(fClientId, out var clientId) || !lignes.Any())
+            return;
+        saving = true;
+        var payload = new DocumentVenteRequest
+        {
+            TypeDocument = fType,
+            ClientId = clientId,
+            DateDocument = fDate,
+            DateEcheance = fEcheance,
+            FraisLivraison = fFraisLivraison,
+            MontantAcompte = fAcompte,
+            Lignes = lignes
+        };
+        var result = editId.HasValue ? await Api.ModifierVenteAsync(editId.Value, payload) : await Api.CreerVenteAsync(payload);
+        saving = false;
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            showForm = false;
+            await Recharger();
+        }
+    }
+
+    private async Task VoirDetail(DocumentVenteDto document)
+    {
+        detailDoc = await Api.GetVenteAsync(document.Id);
+        showDetail = detailDoc != null;
+    }
+
+    private async Task CreerClientRapide()
+    {
+        if (string.IsNullOrWhiteSpace(quickClientNom))
+            return;
+
+        saving = true;
+        var result = await Api.CreerClientAsync(new ClientRequest
+        {
+            RaisonSociale = quickClientNom,
+            TypeClient = quickClientType,
+            Email = quickClientEmail,
+            Telephone = quickClientTel,
+            Ville = quickClientVille
+        });
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            clients = await Api.GetClientsAsync() ?? new();
+            var created = clients
+                .FirstOrDefault(c => string.Equals(c.RaisonSociale, quickClientNom, StringComparison.OrdinalIgnoreCase));
+            if (created != null)
+                ChoisirClient(created);
+            showQuickClient = false;
+        }
+    }
+
+    private async Task Valider(DocumentVenteDto document)
+    {
+        var result = await Api.ValiderVenteAsync(document.Id);
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        await Recharger();
+    }
+
+    private async Task Comptabiliser(DocumentVenteDto document)
+    {
+        var result = await Api.ComptabiliserVenteAsync(document.Id);
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        await Recharger();
+    }
+
+    private async Task Annuler(DocumentVenteDto document)
+    {
+        var result = await Api.AnnulerVenteAsync(document.Id);
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        await Recharger();
+    }
+
+    private void OuvrirReglement(DocumentVenteDto document)
+    {
+        selectedDoc = document;
+        reglementMontant = document.Solde;
+        showReglement = true;
+    }
+
+    private async Task Encaisser()
+    {
+        if (selectedDoc == null || reglementMontant <= 0) return;
+        var result = await Api.AjouterReglementVenteAsync(selectedDoc.Id, new ReglementRequest { Montant = reglementMontant, ModeReglement = 1, DateReglement = DateTime.Today });
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        showReglement = false;
+        await Recharger();
+    }
+
+    private string GetStatutBadge(int statut) => statut switch
+    {
+        1 => "badge-gray",
+        2 => "badge-blue",
+        3 => "badge-amber",
+        4 => "badge-green",
+        5 => "badge-teal",
+        10 => "badge-red",
+        _ => "badge-gray"
+    };
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}
+

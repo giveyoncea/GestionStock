@@ -1,0 +1,394 @@
+﻿@page "/roles"
+@attribute [Authorize(Roles = "Admin")]
+@inject IApiService Api
+
+<PageTitle>RÃ´les & Permissions â€“ GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">RÃ´les & Permissions</h1>
+        <p class="page-date">GÃ©rez les rÃ´les et leurs droits d'accÃ¨s</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau rÃ´le</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+else
+{
+    <div class="roles-full-grid">
+        @foreach (var role in roles)
+        {
+            <div class="role-full-card @(!role.EstActif ? "role-full-card--inactive" : "") @(role.EstSysteme ? "role-full-card--system" : "")">
+                <div class="role-full-header">
+                    <div class="role-color-dot" style="background:@(role.Couleur ?? GetDefaultColor(role.Id))"></div>
+                    <div class="role-full-info">
+                        <span class="role-full-name">@role.Libelle</span>
+                        @if (role.EstSysteme) { <span class="badge badge-gray" style="font-size:9px">SystÃ¨me</span> }
+                        @if (!role.EstActif) { <span class="badge badge-red" style="font-size:9px">Inactif</span> }
+                    </div>
+                    <div class="role-full-actions row-actions">
+                        <button class="btn-row-action btn-row-action--primary" title="Modifier les permissions" @onclick="() => OuvrirEdition(role)">Permissions</button>
+                        @if (!role.EstSysteme)
+                        {
+                            @if (role.EstActif)
+                            {
+                                <button class="btn-row-action btn-row-action--danger" title="Désactiver" @onclick="() => Desactiver(role)">Désactiver</button>
+                            }
+                            else
+                            {
+                                <button class="btn-row-action btn-row-action--success" title="Activer" @onclick="() => Activer(role)">Activer</button>
+                            }
+                            <button class="btn-row-action btn-row-action--danger" title="Supprimer" @onclick="() => OuvrirSuppression(role)">Supprimer</button>
+                        }
+                    </div>
+                </div>
+                <p class="role-full-desc">@role.Description</p>
+                <div class="role-full-stats">
+                    <span class="role-stat"><strong>@role.NbUtilisateurs</strong> utilisateur(s)</span>
+                    <span class="role-stat"><strong>@role.Permissions.Length</strong> permission(s)</span>
+                </div>
+                <div class="role-full-perms">
+                    @foreach (var grp in GrouperPermissions(role.Permissions))
+                    {
+                        <div class="role-perm-group">
+                            <span class="role-perm-module">@grp.Key</span>
+                            @foreach (var p in grp.Value)
+                            {
+                                <span class="role-perm-badge">@FormatAction(p)</span>
+                            }
+                        </div>
+                    }
+                    @if (!role.Permissions.Any())
+                    {
+                        <span class="text-muted small">Aucune permission</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+    @if (!roles.Any()) { <div class="empty-state">Aucun rÃ´le trouvÃ©.</div> }
+}
+
+@* â”€â”€â”€ MODAL CRÃ‰ATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showCreation)
+{
+    <div class="modal-overlay" @onclick="() => showCreation = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>+ Nouveau rÃ´le</h2>
+                <button class="btn-close" @onclick="() => showCreation = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">LibellÃ© *</label>
+                        <input class="field-input" @bind="fLibelle" placeholder="Ex: Responsable entrepÃ´t" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Couleur</label>
+                        <input type="color" class="field-input" style="height:38px;padding:2px" @bind="fCouleur" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Description</label>
+                        <input class="field-input" @bind="fDescription" placeholder="DÃ©crivez ce rÃ´leâ€¦" />
+                    </div>
+                </div>
+                <div style="margin-top:16px">
+                    <label class="field-label">Permissions</label>
+                    @RenderPermGrid(fPermissions)
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreation = false">Annuler</button>
+                <button class="btn-primary" @onclick="CreerRole" disabled="@saving">
+                    @(saving ? "CrÃ©ationâ€¦" : "CrÃ©er le rÃ´le")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* â”€â”€â”€ MODAL Ã‰DITION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showEdition && roleEdite != null)
+{
+    <div class="modal-overlay" @onclick="() => showEdition = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>âœŽ @(roleEdite.EstSysteme ? "Permissions â€” " : "Modifier â€” ")@roleEdite.Libelle</h2>
+                <button class="btn-close" @onclick="() => showEdition = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                @if (!roleEdite.EstSysteme)
+                {
+                    <div class="form-grid" style="margin-bottom:16px">
+                        <div class="field-group">
+                            <label class="field-label">LibellÃ© *</label>
+                            <input class="field-input" @bind="fLibelle" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Couleur</label>
+                            <input type="color" class="field-input" style="height:38px;padding:2px" @bind="fCouleur" />
+                        </div>
+                        <div class="field-group col-span-2">
+                            <label class="field-label">Description</label>
+                            <input class="field-input" @bind="fDescription" />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="role-system-note">
+                        â„¹ Ce rÃ´le systÃ¨me est protÃ©gÃ©. Vous pouvez modifier ses permissions mais pas son nom.
+                    </div>
+                }
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <label class="field-label" style="margin:0">Permissions</label>
+                        <div style="display:flex;gap:8px">
+                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ToutCocher">Tout cocher</button>
+                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ToutDecocher">Tout dÃ©cocher</button>
+                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ResetDefauts">â†© DÃ©fauts</button>
+                        </div>
+                    </div>
+                    @RenderPermGrid(fPermissions)
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showEdition = false">Annuler</button>
+                <button class="btn-primary" @onclick="SauvegarderRole" disabled="@saving">
+                    @(saving ? "Enregistrementâ€¦" : "Sauvegarder")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* â”€â”€â”€ MODAL SUPPRESSION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showSuppression && roleEdite != null)
+{
+    <div class="modal-overlay" @onclick="() => showSuppression = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Supprimer â€” @roleEdite.Libelle</h2>
+                <button class="btn-close" @onclick="() => showSuppression = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                <p>Cette action est irrÃ©versible. Le rÃ´le <strong>@roleEdite.Libelle</strong> sera dÃ©finitivement supprimÃ©.</p>
+                @if (roleEdite.NbUtilisateurs > 0)
+                {
+                    <div class="alert-error">Ce rÃ´le est assignÃ© Ã  @roleEdite.NbUtilisateurs utilisateur(s). RÃ©assignez-les d'abord.</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showSuppression = false">Annuler</button>
+                <button class="btn-danger" @onclick="SupprimerRole" disabled="@(saving || roleEdite.NbUtilisateurs > 0)">
+                    @(saving ? "Suppressionâ€¦" : "Confirmer la suppression")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<RoleCompletDto> roles = new();
+    private bool chargement = true, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private bool showCreation = false;
+    private bool showEdition = false;
+    private bool showSuppression = false;
+    private RoleCompletDto? roleEdite;
+
+    private string fLibelle = "", fDescription = "", fCouleur = "#6366f1";
+    private HashSet<string> fPermissions = new();
+
+    private static readonly string[] Catalogue = {
+        "articles.lire","articles.ecrire","stocks.lire","stocks.ecrire",
+        "mouvements.lire","mouvements.ecrire","fournisseurs.lire","fournisseurs.ecrire",
+        "commandes.lire","commandes.ecrire","rapports.lire",
+        "inventaire.saisir","inventaire.valider",
+        "utilisateurs.gerer","parametres.gerer","tracabilite.lire"
+    };
+
+    private static readonly Dictionary<int, string[]> Defauts = new()
+    {
+        { 1, new[] { "articles.lire","articles.ecrire","stocks.lire","stocks.ecrire","mouvements.lire","mouvements.ecrire","fournisseurs.lire","fournisseurs.ecrire","commandes.lire","commandes.ecrire","rapports.lire","utilisateurs.gerer","parametres.gerer","inventaire.valider","tracabilite.lire" } },
+        { 2, new[] { "articles.lire","stocks.lire","stocks.ecrire","mouvements.lire","mouvements.ecrire","inventaire.saisir","tracabilite.lire" } },
+        { 3, new[] { "articles.lire","stocks.lire","fournisseurs.lire","fournisseurs.ecrire","commandes.lire","commandes.ecrire","rapports.lire" } },
+        { 4, new[] { "articles.lire","articles.ecrire","stocks.lire","stocks.ecrire","mouvements.lire","mouvements.ecrire","fournisseurs.lire","commandes.lire","rapports.lire","inventaire.valider","tracabilite.lire" } },
+        { 5, new[] { "articles.lire","stocks.lire","mouvements.lire","fournisseurs.lire","commandes.lire","rapports.lire","tracabilite.lire" } },
+    };
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        chargement = true;
+        roles = await Api.GetRolesCompletAsync() ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirCreation()
+    {
+        fLibelle = ""; fDescription = ""; fCouleur = "#6366f1";
+        fPermissions = new(); message = null;
+        showCreation = true;
+    }
+
+    private void OuvrirEdition(RoleCompletDto role)
+    {
+        roleEdite = role;
+        fLibelle = role.Libelle;
+        fDescription = role.Description;
+        fCouleur = role.Couleur ?? GetDefaultColor(role.Id);
+        fPermissions = new HashSet<string>(role.Permissions);
+        showEdition = true;
+    }
+
+    private void OuvrirSuppression(RoleCompletDto role)
+    {
+        roleEdite = role;
+        showSuppression = true;
+    }
+
+    private void ToutCocher() { foreach (var p in Catalogue) fPermissions.Add(p); }
+    private void ToutDecocher() => fPermissions.Clear();
+    private void ResetDefauts()
+    {
+        if (roleEdite != null && Defauts.TryGetValue(roleEdite.Id, out var def))
+            fPermissions = new HashSet<string>(def);
+    }
+
+    private async Task CreerRole()
+    {
+        if (string.IsNullOrWhiteSpace(fLibelle))
+        {
+            message = "Le libellÃ© est obligatoire."; msgCls = "alert-error"; return;
+        }
+        saving = true;
+        var r = await Api.CreerRoleAsync(new RoleRequest
+        {
+            Libelle = fLibelle, Description = fDescription,
+            Couleur = fCouleur, Permissions = fPermissions.ToArray()
+        });
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showCreation = false; await Load(); }
+    }
+
+    private async Task SauvegarderRole()
+    {
+        if (roleEdite == null) return;
+        saving = true;
+        var r = await Api.ModifierRoleAsync(roleEdite.Id, new RoleRequest
+        {
+            Libelle = fLibelle, Description = fDescription,
+            Couleur = fCouleur, Permissions = fPermissions.ToArray()
+        });
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showEdition = false; await Load(); }
+    }
+
+    private async Task Activer(RoleCompletDto role)
+    {
+        var r = await Api.ActiverRoleAsync(role.Id);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) await Load();
+    }
+
+    private async Task Desactiver(RoleCompletDto role)
+    {
+        var r = await Api.DesactiverRoleAsync(role.Id);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) await Load();
+    }
+
+    private async Task SupprimerRole()
+    {
+        if (roleEdite == null) return;
+        saving = true;
+        var r = await Api.SupprimerRoleAsync(roleEdite.Id);
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showSuppression = false; await Load(); }
+    }
+
+    private RenderFragment RenderPermGrid(HashSet<string> selected) => __builder =>
+    {
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "perm-grid");
+        foreach (var grp in GrouperPermissions(Catalogue))
+        {
+            __builder.OpenElement(2, "div");
+            __builder.AddAttribute(3, "class", "perm-group");
+            __builder.OpenElement(4, "div");
+            __builder.AddAttribute(5, "class", "perm-group-title");
+            __builder.AddContent(6, grp.Key);
+            __builder.CloseElement();
+            foreach (var p in grp.Value)
+            {
+                var perm = p;
+                __builder.OpenElement(7, "label");
+                __builder.AddAttribute(8, "class", "perm-check-label");
+                __builder.OpenElement(9, "input");
+                __builder.AddAttribute(10, "type", "checkbox");
+                __builder.AddAttribute(11, "checked", selected.Contains(perm));
+                __builder.AddAttribute(12, "onchange", EventCallback.Factory.Create<Microsoft.AspNetCore.Components.ChangeEventArgs>(
+                    this, e => { if ((bool)e.Value!) selected.Add(perm); else selected.Remove(perm); }));
+                __builder.CloseElement();
+                __builder.OpenElement(13, "span");
+                __builder.AddAttribute(14, "class", "perm-check-text");
+                __builder.AddContent(15, FormatAction(perm));
+                __builder.CloseElement();
+                __builder.CloseElement();
+            }
+            __builder.CloseElement();
+        }
+        __builder.CloseElement();
+    };
+
+    private Dictionary<string, List<string>> GrouperPermissions(IEnumerable<string> perms)
+    {
+        var map = new Dictionary<string, string> {
+            {"articles","Articles"}, {"stocks","Stocks"}, {"mouvements","Mouvements"},
+            {"fournisseurs","Fournisseurs"}, {"commandes","Commandes"}, {"rapports","Rapports"},
+            {"inventaire","Inventaire"}, {"utilisateurs","Utilisateurs"},
+            {"parametres","ParamÃ¨tres"}, {"tracabilite","TraÃ§abilitÃ©"}
+        };
+        var result = new Dictionary<string, List<string>>();
+        foreach (var p in perms)
+        {
+            var mod = p.Split('.')[0];
+            var label = map.GetValueOrDefault(mod, mod);
+            if (!result.ContainsKey(label)) result[label] = new();
+            result[label].Add(p);
+        }
+        return result;
+    }
+
+    private string FormatAction(string p) => p.Split('.').Length > 1 ? p.Split('.')[1] switch {
+        "lire" => "ðŸ“– Lire", "ecrire" => "âœ Ã‰crire",
+        "gerer" => "âš™ GÃ©rer", "saisir" => "ðŸ“ Saisir",
+        "valider" => "âœ“ Valider", _ => p.Split('.')[1]
+    } : p;
+
+    private string GetDefaultColor(int id) => id switch {
+        1 => "#e24b4a", 2 => "#3d9b52", 3 => "#2b7dd4",
+        4 => "#6366f1", 5 => "#888", _ => "#f5a623"
+    };
+}
+

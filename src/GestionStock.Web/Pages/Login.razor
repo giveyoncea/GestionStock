@@ -1,0 +1,173 @@
+@page "/login"
+@layout EmptyLayout
+@inject IAuthService Auth
+@inject NavigationManager Nav
+@inject HttpClient Http
+
+<PageTitle>Connexion – GestionStock</PageTitle>
+
+<div class="auth-wrapper">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="logo-mark">GS</div>
+            <div class="logo-text">
+                <span class="logo-title">GestionStock</span>
+                <span class="logo-sub">WMS · SCM</span>
+            </div>
+        </div>
+
+        <h1 class="auth-title">Connexion</h1>
+
+        @if (!string.IsNullOrEmpty(erreur))
+        {
+            <div class="alert-error">@erreur</div>
+        }
+
+        @if (apiIndisponible)
+        {
+            <div class="alert-warn" style="margin-bottom:12px">
+                ⚠ L'API ne répond pas sur <code>@Http.BaseAddress</code>.
+                Vérifiez que <strong>GestionStock.API</strong> est démarré dans Visual Studio.
+            </div>
+        }
+
+        <div class="field-group">
+            <label class="field-label">Email</label>
+            <input class="field-input" type="email" @bind="email"
+                   @onkeydown="OnKeyDown" placeholder="admin@gestionstock.com"
+                   disabled="@chargement" />
+        </div>
+
+        <div class="field-group">
+            <label class="field-label">Mot de passe</label>
+            <input class="field-input" type="password" @bind="motDePasse"
+                   @onkeydown="OnKeyDown" disabled="@chargement" />
+        </div>
+
+        <div class="field-group">
+            <div class="tenant-toggle" @onclick="() => avecTenant = !avecTenant">
+                <span class="tenant-toggle-icon">@(avecTenant ? "▾" : "▸")</span>
+                <span class="tenant-toggle-label">
+                    @(avecTenant ? "Connexion avec code tenant" : "J'ai un code tenant")
+                </span>
+            </div>
+            @if (avecTenant)
+            {
+                <input class="field-input field-input-code" @bind="tenantCode"
+                       @onkeydown="OnKeyDown" disabled="@chargement"
+                       placeholder="Ex : MASC"
+                       style="margin-top:8px;font-family:var(--font-mono);letter-spacing:.1em;text-transform:uppercase" />
+                <span class="field-hint">Code reçu lors de la création de votre espace.</span>
+            }
+        </div>
+
+        <button class="btn-primary btn-auth" @onclick="HandleLogin" disabled="@chargement">
+            @if (chargement)
+            {
+                <span class="login-spinner">⟳</span>
+                <span>Connexion en cours…</span>
+            }
+            else
+            {
+                <span>Se connecter</span>
+                <span class="btn-arrow">→</span>
+            }
+        </button>
+
+        <div class="login-hint">
+            Compte par défaut : <code>admin@gestionstock.com</code>
+        </div>
+
+        <div class="auth-register-link">
+            Pas encore de compte ?
+            <a href="/register" class="link-amber">Créer mon espace →</a>
+        </div>
+    </div>
+
+    <div class="login-decoration">
+        <div class="deco-grid"></div>
+        <div class="deco-text">WMS · SCM · ERP</div>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string motDePasse = "";
+    private string tenantCode = "";
+    private bool avecTenant = false;
+    private string? erreur;
+    private bool chargement;
+    private bool apiIndisponible;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Parse tenant from query string
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var qs = uri.Query.TrimStart('?');
+        foreach (var part in qs.Split('&'))
+        {
+            var kv = part.Split('=');
+            if (kv.Length == 2 && kv[0] == "tenant")
+            { tenantCode = Uri.UnescapeDataString(kv[1]); avecTenant = true; }
+        }
+
+        // Test API connectivity
+        try
+        {
+            var ping = await Http.GetAsync("api/auth/ping");
+            apiIndisponible = !ping.IsSuccessStatusCode;
+        }
+        catch
+        {
+            apiIndisponible = true;
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await HandleLogin();
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(motDePasse))
+        {
+            erreur = "Veuillez saisir votre email et votre mot de passe.";
+            return;
+        }
+
+        erreur = null;
+        chargement = true;
+        StateHasChanged();
+
+        AuthResult? result;
+        try
+        {
+            if (avecTenant && !string.IsNullOrWhiteSpace(tenantCode))
+                result = await Auth.LoginTenantAsync(email, motDePasse, tenantCode.Trim().ToUpper());
+            else
+                result = await Auth.LoginAsync(email, motDePasse);
+        }
+        catch (Exception ex)
+        {
+            result = new AuthResult(false, null, null, null, null, email, null, null,
+                $"Erreur réseau : {ex.Message}");
+        }
+
+        chargement = false;
+        StateHasChanged();
+
+        if (result?.Succes == true)
+        {
+            // forceLoad: true — recharge complète pour que le token soit lu
+            Nav.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        else
+        {
+            erreur = result?.Message ?? "Connexion impossible.";
+        }
+    }
+}

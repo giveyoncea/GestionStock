@@ -1,0 +1,1285 @@
+@page "/commercial"
+@attribute [Authorize]
+@inject IApiService Api
+
+<PageTitle>Commercial – GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Gestion Commerciale</h1>
+        <p class="page-date">Ventes · Achats · Clients · Règlements</p>
+    </div>
+    <div class="header-actions">
+        @if (onglet == "ventes")
+        {
+            <button class="btn-primary" @onclick="OuvrirCreationVente">+ Nouveau document</button>
+        }
+        else if (onglet == "achats")
+        {
+            <button class="btn-primary" @onclick="OuvrirCreationAchat">+ Nouveau document</button>
+        }
+        else if (onglet == "clients")
+        {
+            <button class="btn-primary" @onclick="OuvrirCreationClient">+ Nouveau client</button>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message)) { <div class="@msgCls">@message</div> }
+
+@* ── Onglets principaux ──────────────────────────────────────────────────── *@
+<div class="comm-tabs">
+    <button class="comm-tab @(onglet=="dashboard"?"comm-tab--active":"")" @onclick='() => SetOnglet("dashboard")'>📊 Tableau de bord</button>
+    <button class="comm-tab @(onglet=="ventes"?"comm-tab--active":"")" @onclick='() => SetOnglet("ventes")'>📄 Ventes</button>
+    <button class="comm-tab @(onglet=="achats"?"comm-tab--active":"")" @onclick='() => SetOnglet("achats")'>🛒 Achats</button>
+    <button class="comm-tab @(onglet=="clients"?"comm-tab--active":"")" @onclick='() => SetOnglet("clients")'>👤 Clients</button>
+</div>
+
+@* ═══════════════════════════════════════════════════════
+   ONGLET DASHBOARD
+═══════════════════════════════════════════════════════ *@
+@if (onglet == "dashboard")
+{
+    @if (chargementDash) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+    else if (dash != null)
+    {
+        <div class="stat-cards-grid" style="margin-top:16px">
+            <div class="stat-card stat-card--blue">
+                <div class="stat-icon">👤</div>
+                <div class="stat-value">@dash.NbClients</div>
+                <div class="stat-label">Clients actifs</div>
+            </div>
+            <div class="stat-card stat-card--amber">
+                <div class="stat-icon">📋</div>
+                <div class="stat-value">@dash.DevisOuverts</div>
+                <div class="stat-label">Devis ouverts</div>
+            </div>
+            <div class="stat-card stat-card--teal">
+                <div class="stat-icon">📦</div>
+                <div class="stat-value">@dash.CommandesEnCours</div>
+                <div class="stat-label">Commandes en cours</div>
+            </div>
+            <div class="stat-card stat-card--red">
+                <div class="stat-icon">🧾</div>
+                <div class="stat-value">@dash.FacturesNonReglees</div>
+                <div class="stat-label">Factures à encaisser</div>
+            </div>
+            <div class="stat-card stat-card--green">
+                <div class="stat-icon">💶</div>
+                <div class="stat-value">@dash.CaMois.ToString("N0") €</div>
+                <div class="stat-label">CA du mois</div>
+            </div>
+            <div class="stat-card @(dash.EncoursClient > 0 ? "stat-card--amber" : "stat-card--gray")">
+                <div class="stat-icon">⏳</div>
+                <div class="stat-value">@dash.EncoursClient.ToString("N0") €</div>
+                <div class="stat-label">Encours clients</div>
+            </div>
+            <div class="stat-card stat-card--blue">
+                <div class="stat-icon">🛒</div>
+                <div class="stat-value">@dash.CommandesFourn</div>
+                <div class="stat-label">Cdes fournisseurs</div>
+            </div>
+        </div>
+        <div style="margin-top:24px">
+            <h3 class="section-title">Flux de transformation</h3>
+            <div class="flux-diagram">
+                <div class="flux-group">
+                    <div class="flux-title">📄 VENTES</div>
+                    <div class="flux-steps">
+                        <span class="flux-step flux-step--1">Devis</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--2">Commande</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--3">Bon de livraison</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--4">Facture</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--5">Avoir</span>
+                    </div>
+                </div>
+                <div class="flux-group" style="margin-top:12px">
+                    <div class="flux-title">🛒 ACHATS</div>
+                    <div class="flux-steps">
+                        <span class="flux-step flux-step--1">Demande</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--2">Commande</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--3">Réception</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--4">Facture</span>
+                        <span class="flux-arrow">→</span>
+                        <span class="flux-step flux-step--5">Avoir</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@* ═══════════════════════════════════════════════════════
+   ONGLET VENTES
+═══════════════════════════════════════════════════════ *@
+@if (onglet == "ventes")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar-filters" style="flex-wrap:wrap;gap:6px">
+            @foreach (var tf in TypesVente)
+            {
+                <button class="btn-secondary @(filtreTypeVente==tf.Id?"btn-active":"")"
+                        @onclick="() => SetFiltreVente(tf.Id)">@tf.Libelle</button>
+            }
+        </div>
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input class="search-input" type="text" placeholder="N°, client…"
+                   @bind="rechercheVente" @bind:event="oninput" />
+        </div>
+    </div>
+
+    @if (chargementVentes) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+    else
+    {
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>N° Document</th><th>Type</th><th>Client</th><th>Date</th>
+                    <th class="text-right">HT</th><th class="text-right">TTC</th>
+                    <th class="text-right">Solde</th><th>Statut</th><th>Actions</th>
+                </tr></thead>
+                <tbody>
+                @foreach (var d in VentesFiltrees)
+                {
+                    <tr class="@(d.EstVerrouille?"row-locked":"")">
+                        <td><code class="mono">@d.Numero</code></td>
+                        <td><span class="badge @GetBadgeVente(d.TypeDocument)">@d.TypeLibelle</span></td>
+                        <td class="cell-main">@d.ClientNom</td>
+                        <td class="small text-muted">@d.DateDocument.ToString("dd/MM/yyyy")</td>
+                        <td class="text-right mono small">@d.MontantHT.ToString("N2") €</td>
+                        <td class="text-right mono">@d.MontantTTC.ToString("N2") €</td>
+                        <td class="text-right mono @(d.Solde>0&&d.TypeDocument==4?"text-warn":"")">@d.Solde.ToString("N2") €</td>
+                        <td>
+                            <span class="badge @GetStatutBadgeVente(d.Statut)">@d.StatutLibelle</span>
+                            @if (d.EstVerrouille) { <span style="margin-left:4px" title="Réglé">🔒</span> }
+                        </td>
+                        <td class="actions-cell">
+                            @if (d.Statut == 1 && !d.EstVerrouille)
+                            { <button class="btn-icon btn-icon-success" title="Valider" @onclick="() => ValiderVente(d)">✓</button> }
+                            @if (d.TypeDocument < 5 && !d.EstVerrouille && d.Statut >= 2 && d.Statut <= 7)
+                            { <button class="btn-icon" title="Transformer →" @onclick="() => OuvrirTransfo(d)">→</button> }
+                            @if (d.TypeDocument == 4 && d.Solde > 0 && !d.EstVerrouille)
+                            { <button class="btn-icon btn-icon-success" title="Encaisser" @onclick="() => OuvrirReglement(d)">💶</button> }
+                            @if (!d.EstVerrouille && d.Statut < 9)
+                            { <button class="btn-icon btn-icon-danger" title="Annuler" @onclick="() => AnnulerVente(d)">✕</button> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (!ventes.Any()) { <div class="empty-state">Aucun document de vente. Cliquez "+ Nouveau document".</div> }
+        else if (!VentesFiltrees.Any()) { <div class="empty-state">Aucun document pour ce filtre.</div> }
+    }
+}
+
+@* ═══════════════════════════════════════════════════════
+   ONGLET ACHATS
+═══════════════════════════════════════════════════════ *@
+@if (onglet == "achats")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar-filters" style="flex-wrap:wrap;gap:6px">
+            @foreach (var tf in TypesAchat)
+            {
+                <button class="btn-secondary @(filtreTypeAchat==tf.Id?"btn-active":"")"
+                        @onclick="() => SetFiltreAchat(tf.Id)">@tf.Libelle</button>
+            }
+        </div>
+    </div>
+
+    @if (chargementAchats) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+    else
+    {
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>N° Document</th><th>Type</th><th>Fournisseur</th><th>Date</th>
+                    <th>Livraison prévue</th><th class="text-right">TTC</th>
+                    <th class="text-right">Solde</th><th>Statut</th><th>Actions</th>
+                </tr></thead>
+                <tbody>
+                @foreach (var d in achats)
+                {
+                    <tr class="@(d.EstVerrouille?"row-locked":"")">
+                        <td><code class="mono">@d.Numero</code></td>
+                        <td><span class="badge @GetBadgeAchat(d.TypeDocument)">@d.TypeLibelle</span></td>
+                        <td class="cell-main">@d.FournisseurNom</td>
+                        <td class="small text-muted">@d.DateDocument.ToString("dd/MM/yyyy")</td>
+                        <td class="small text-muted">@(d.DateLivraisonPrevue?.ToString("dd/MM/yyyy") ?? "—")</td>
+                        <td class="text-right mono">@d.MontantTTC.ToString("N2") €</td>
+                        <td class="text-right mono @(d.Solde>0&&d.TypeDocument==4?"text-warn":"")">@d.Solde.ToString("N2") €</td>
+                        <td><span class="badge @GetStatutBadgeAchat(d.Statut)">@d.StatutLibelle</span>
+                            @if (d.EstVerrouille) { <span title="Réglé">🔒</span> }</td>
+                        <td class="actions-cell">
+                            @if (d.TypeDocument < 4 && !d.EstVerrouille)
+                            { <button class="btn-icon" title="Transformer →" @onclick="() => OuvrirTransfoAchat(d)">→</button> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (!achats.Any()) { <div class="empty-state">Aucun document d'achat. Cliquez "+ Nouveau document".</div> }
+    }
+}
+
+@* ═══════════════════════════════════════════════════════
+   ONGLET CLIENTS
+═══════════════════════════════════════════════════════ *@
+@if (onglet == "clients")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input class="search-input" type="text" placeholder="Nom, email…"
+                   @bind="rechercheClient" @bind:event="oninput" />
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@ClientsFiltres.Count() client(s)</span>
+        </div>
+    </div>
+    @if (chargementClients) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+    else
+    {
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Code</th><th>Client</th><th>Type</th><th>Email</th>
+                    <th>Ville</th><th class="text-right">Remise</th>
+                    <th class="text-right">Délai</th><th class="text-right">Encours</th><th></th>
+                </tr></thead>
+                <tbody>
+                @foreach (var c in ClientsFiltres)
+                {
+                    <tr class="@(!c.EstActif?"row-inactive":"")">
+                        <td><code>@c.Code</code></td>
+                        <td class="cell-main">@c.RaisonSociale</td>
+                        <td><span class="badge @(c.TypeClient==1?"badge-gray":"badge-blue")">@(c.TypeClient==1?"Particulier":"Pro")</span></td>
+                        <td class="small text-muted">@c.Email</td>
+                        <td class="small text-muted">@c.Ville</td>
+                        <td class="text-right mono">@c.TauxRemise.ToString("N1") %</td>
+                        <td class="text-right mono">@c.DelaiPaiementJours j</td>
+                        <td class="text-right mono @(c.Encours>0?"text-warn":"")">@c.Encours.ToString("N2") €</td>
+                        <td class="actions-cell">
+                            <button class="btn-icon" title="Modifier" @onclick="() => OuvrirEditionClient(c)">✎</button>
+                            <button class="btn-icon" title="Documents" @onclick="() => VoirDocumentsClient(c)">📄</button>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (!clients.Any()) { <div class="empty-state">Aucun client.</div> }
+    }
+}
+
+@* ═══════════════════════════════════════════════════════
+   MODALS VENTES
+═══════════════════════════════════════════════════════ *@
+
+@* Création document vente *@
+@if (showCreationVente)
+{
+    <div class="modal-overlay" @onclick="() => showCreationVente = false">
+        <div class="modal modal-xl" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>+ Nouveau document de vente</h2>
+                <button class="btn-close" @onclick="() => showCreationVente = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Type *</label>
+                        <select class="field-input" @bind="fVType">
+                            <option value="1">Devis</option>
+                            <option value="2">Commande client</option>
+                            <option value="3">Bon de livraison</option>
+                            <option value="4">Facture</option>
+                            <option value="5">Avoir client</option>
+                        </select>
+                    </div>
+                    <div class="field-group tiers-search-group">
+                        <label class="field-label">Client *</label>
+                        <div class="tiers-search-wrap">
+                            <input class="field-input tiers-search-input"
+                                   placeholder="Rechercher un client…"
+                                   value="@rechercheClientDoc"
+                                   @onfocus="() => showDropdownClient = true"
+                                   @oninput="FiltrerClients" />
+                            @if (!string.IsNullOrEmpty(fVClientNom))
+                            {
+                                <span class="tiers-selected-badge">
+                                    ✓ @fVClientNom
+                                    <button class="tiers-clear-btn" @onclick="DeselectClient">✕</button>
+                                </span>
+                            }
+                            @if (showDropdownClient && clientsFiltresDoc.Any())
+                            {
+                                <div class="tiers-dropdown">
+                                    @foreach (var cl in clientsFiltresDoc.Take(8))
+                                    {
+                                        <button class="tiers-dropdown-item" @onclick="() => SelectClient(cl)">
+                                            <span class="tiers-dd-rs">@cl.RaisonSociale</span>
+                                            <span class="tiers-dd-sub">@cl.Code @(cl.Ville != null ? "· " + cl.Ville : "")</span>
+                                        </button>
+                                    }
+                                    <button class="tiers-dropdown-create" @onclick="OuvrirCreationClientRapide">
+                                        + Créer "@rechercheClientDoc"
+                                    </button>
+                                </div>
+                            }
+                            @if (showDropdownClient && !clientsFiltresDoc.Any() && !string.IsNullOrWhiteSpace(rechercheClientDoc))
+                            {
+                                <div class="tiers-dropdown">
+                                    <div class="tiers-dropdown-empty">Aucun client trouvé</div>
+                                    <button class="tiers-dropdown-create" @onclick="OuvrirCreationClientRapide">
+                                        + Créer "@rechercheClientDoc"
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date</label>
+                        <input class="field-input" type="date" @bind="fVDate" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Échéance</label>
+                        <input class="field-input" type="date" @bind="fVEcheance" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Frais livraison (€)</label>
+                        <input class="field-input" type="number" step="0.01" min="0" @bind="fVFraisLiv" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Acompte (€)</label>
+                        <input class="field-input" type="number" step="0.01" min="0" @bind="fVAcompte" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Notes client</label>
+                        <textarea class="field-input" rows="2" @bind="fVNotes"></textarea>
+                    </div>
+                </div>
+
+                @* ── Lignes ── *@
+                <div style="margin-top:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <label class="field-label" style="margin:0">Lignes articles</label>
+                        <button class="btn-secondary" style="font-size:12px" @onclick="AjouterLigneVente">+ Ajouter</button>
+                    </div>
+                    @if (fVLignes.Any())
+                    {
+                        <div class="table-container" style="max-height:260px;overflow-y:auto">
+                            <table class="data-table" style="font-size:12px">
+                                <thead><tr>
+                                    <th>Article</th><th>Désignation</th>
+                                    <th class="text-right">Qté</th><th class="text-right">PU HT</th>
+                                    <th class="text-right">Rem.%</th><th class="text-right">TVA%</th>
+                                    <th class="text-right">Montant TTC</th><th></th>
+                                </tr></thead>
+                                <tbody>
+                                @for (var i = 0; i < fVLignes.Count; i++)
+                                {
+                                    var idx = i;
+                                    var l = fVLignes[idx];
+                                    <tr>
+                                        <td>
+                                            <select class="field-input" style="width:130px"
+                                                    @bind="l.ArticleId" @bind:after="() => OnArticleSelectVente(idx)">
+                                                <option value="@Guid.Empty">—</option>
+                                                @foreach (var a in articles)
+                                                { <option value="@a.Id">[@a.Code] @a.Designation</option> }
+                                            </select>
+                                        </td>
+                                        <td><input class="field-input" @bind="l.Designation" style="width:140px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.001" @bind="l.Quantite" style="width:65px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.01" @bind="l.PrixUnitaireHT" style="width:80px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.1" @bind="l.TauxRemise" style="width:55px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.1" @bind="l.TauxTVA" style="width:55px" /></td>
+                                        <td class="text-right mono">@((l.Quantite * l.PrixUnitaireHT * (1m - l.TauxRemise / 100m) * (1m + l.TauxTVA / 100m)).ToString("N2")) €</td>
+                                        <td><button class="btn-icon btn-icon-danger" @onclick="() => SupprimerLigneVente(idx)">✕</button></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="doc-totaux">
+                            <span>HT : <strong>@TotalHTVente.ToString("N2") €</strong></span>
+                            <span>TVA : <strong>@TotalTVAVente.ToString("N2") €</strong></span>
+                            @if (fVFraisLiv > 0) { <span>Frais liv. : <strong>@fVFraisLiv.ToString("N2") €</strong></span> }
+                            @if (fVAcompte > 0) { <span>Acompte : <strong>-@fVAcompte.ToString("N2") €</strong></span> }
+                            <span class="total-ttc">Total TTC : <strong>@TotalTTCVente.ToString("N2") €</strong></span>
+                        </div>
+                    }
+                    else { <div class="empty-state" style="padding:10px">Ajoutez des articles.</div> }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreationVente = false">Annuler</button>
+                <button class="btn-primary" @onclick="CreerDocumentVente" disabled="@saving">
+                    @(saving ? "Création…" : "Créer le document")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Transformation vente *@
+@if (showTransfoVente && docVenteSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="() => showTransfoVente = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>→ Transformer @docVenteSelectionne.Numero</h2>
+                <button class="btn-close" @onclick="() => showTransfoVente = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="transfo-info">
+                    <span class="badge @GetBadgeVente(docVenteSelectionne.TypeDocument)">@docVenteSelectionne.TypeLibelle</span>
+                    <span class="flux-arrow">→</span>
+                    <span class="text-muted small">@docVenteSelectionne.ClientNom — @docVenteSelectionne.MontantTTC.ToString("N2") €</span>
+                </div>
+                <div class="transfo-choices" style="margin-top:14px">
+                    @foreach (var td in GetTransfoVente(docVenteSelectionne.TypeDocument))
+                    {
+                        <button class="transfo-btn" @onclick="() => TransformerVente(td.Id)">
+                            <span class="badge @GetBadgeVente(td.Id)">@td.Libelle</span>
+                        </button>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showTransfoVente = false">Annuler</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Règlement *@
+@if (showReglement && docVenteSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="() => showReglement = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>💶 Encaisser — @docVenteSelectionne.Numero</h2>
+                <button class="btn-close" @onclick="() => showReglement = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Solde restant</label>
+                        <div class="field-input" style="background:rgba(0,0,0,.03);font-weight:700;color:var(--col-amber)">
+                            @docVenteSelectionne.Solde.ToString("N2") €
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Montant *</label>
+                        <input class="field-input" type="number" step="0.01" @bind="rMontant" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Mode de paiement</label>
+                        <select class="field-input" @bind="rMode">
+                            <option value="1">Espèces</option>
+                            <option value="2">Chèque</option>
+                            <option value="3">Virement</option>
+                            <option value="4">Carte bancaire</option>
+                            <option value="5">Prélèvement</option>
+                            <option value="6">Traite</option>
+                            <option value="7">Autre</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date règlement</label>
+                        <input class="field-input" type="date" @bind="rDate" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Référence</label>
+                        <input class="field-input" @bind="rRef" placeholder="N° chèque, virement…" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showReglement = false">Annuler</button>
+                <button class="btn-primary" @onclick="EnregistrerReglement" disabled="@saving">
+                    @(saving ? "Enregistrement…" : "Encaisser")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ═══════════════════════════════════════════════════════
+   MODALS ACHATS
+═══════════════════════════════════════════════════════ *@
+@if (showCreationAchat)
+{
+    <div class="modal-overlay" @onclick="() => showCreationAchat = false">
+        <div class="modal modal-xl" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>+ Nouveau document d'achat</h2>
+                <button class="btn-close" @onclick="() => showCreationAchat = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Type *</label>
+                        <select class="field-input" @bind="fAType">
+                            <option value="1">Demande d'achat</option>
+                            <option value="2">Commande fournisseur</option>
+                            <option value="3">Bon de réception</option>
+                            <option value="4">Facture fournisseur</option>
+                            <option value="5">Avoir fournisseur</option>
+                        </select>
+                    </div>
+                    <div class="field-group tiers-search-group">
+                        <label class="field-label">Fournisseur *</label>
+                        <div class="tiers-search-wrap">
+                            <input class="field-input tiers-search-input"
+                                   placeholder="Rechercher un fournisseur…"
+                                   value="@rechercheQuatreDoc"
+                                   @onfocus="() => showDropdownFour = true"
+                                   @oninput="FiltrerFournisseurs" />
+                            @if (!string.IsNullOrEmpty(fAFournisseurNom))
+                            {
+                                <span class="tiers-selected-badge">
+                                    ✓ @fAFournisseurNom
+                                    <button class="tiers-clear-btn" @onclick="DeselectFournisseur">✕</button>
+                                </span>
+                            }
+                            @if (showDropdownFour && fournisseursFiltresDoc.Any())
+                            {
+                                <div class="tiers-dropdown">
+                                    @foreach (var f in fournisseursFiltresDoc.Take(8))
+                                    {
+                                        <button class="tiers-dropdown-item" @onclick="() => SelectFournisseur(f)">
+                                            <span class="tiers-dd-rs">@f.RaisonSociale</span>
+                                            <span class="tiers-dd-sub">@f.Code</span>
+                                        </button>
+                                    }
+                                    <button class="tiers-dropdown-create" @onclick="OuvrirCreationFournisseurRapide">
+                                        + Créer "@rechercheQuatreDoc"
+                                    </button>
+                                </div>
+                            }
+                            @if (showDropdownFour && !fournisseursFiltresDoc.Any() && !string.IsNullOrWhiteSpace(rechercheQuatreDoc))
+                            {
+                                <div class="tiers-dropdown">
+                                    <div class="tiers-dropdown-empty">Aucun fournisseur trouvé</div>
+                                    <button class="tiers-dropdown-create" @onclick="OuvrirCreationFournisseurRapide">
+                                        + Créer "@rechercheQuatreDoc"
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date</label>
+                        <input class="field-input" type="date" @bind="fADate" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Livraison prévue</label>
+                        <input class="field-input" type="date" @bind="fADlivPrevue" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Frais livraison (€)</label>
+                        <input class="field-input" type="number" step="0.01" min="0" @bind="fAFraisLiv" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Notes internes</label>
+                        <textarea class="field-input" rows="2" @bind="fANotes"></textarea>
+                    </div>
+                </div>
+                <div style="margin-top:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <label class="field-label" style="margin:0">Lignes articles</label>
+                        <button class="btn-secondary" style="font-size:12px" @onclick="AjouterLigneAchat">+ Ajouter</button>
+                    </div>
+                    @if (fALignes.Any())
+                    {
+                        <div class="table-container" style="max-height:260px;overflow-y:auto">
+                            <table class="data-table" style="font-size:12px">
+                                <thead><tr>
+                                    <th>Article</th><th>Désignation</th>
+                                    <th class="text-right">Qté</th><th class="text-right">PU HT</th>
+                                    <th class="text-right">Rem.%</th><th class="text-right">TVA%</th>
+                                    <th class="text-right">Montant TTC</th><th></th>
+                                </tr></thead>
+                                <tbody>
+                                @for (var i = 0; i < fALignes.Count; i++)
+                                {
+                                    var idx = i;
+                                    var l = fALignes[idx];
+                                    <tr>
+                                        <td>
+                                            <select class="field-input" style="width:130px"
+                                                    @bind="l.ArticleId" @bind:after="() => OnArticleSelectAchat(idx)">
+                                                <option value="@Guid.Empty">—</option>
+                                                @foreach (var a in articles)
+                                                { <option value="@a.Id">[@a.Code] @a.Designation</option> }
+                                            </select>
+                                        </td>
+                                        <td><input class="field-input" @bind="l.Designation" style="width:140px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.001" @bind="l.Quantite" style="width:65px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.01" @bind="l.PrixUnitaireHT" style="width:80px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.1" @bind="l.TauxRemise" style="width:55px" /></td>
+                                        <td><input class="field-input text-right" type="number" step="0.1" @bind="l.TauxTVA" style="width:55px" /></td>
+                                        <td class="text-right mono">@((l.Quantite * l.PrixUnitaireHT * (1m - l.TauxRemise / 100m) * (1m + l.TauxTVA / 100m)).ToString("N2")) €</td>
+                                        <td><button class="btn-icon btn-icon-danger" @onclick="() => SupprimerLigneAchat(idx)">✕</button></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="doc-totaux">
+                            <span>HT : <strong>@TotalHTAchat.ToString("N2") €</strong></span>
+                            <span>TVA : <strong>@TotalTVAAchat.ToString("N2") €</strong></span>
+                            <span class="total-ttc">Total TTC : <strong>@TotalTTCAchat.ToString("N2") €</strong></span>
+                        </div>
+                    }
+                    else { <div class="empty-state" style="padding:10px">Ajoutez des articles.</div> }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreationAchat = false">Annuler</button>
+                <button class="btn-primary" @onclick="CreerDocumentAchat" disabled="@saving">
+                    @(saving ? "Création…" : "Créer le document")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Transformation achat *@
+@if (showTransfoAchat && docAchatSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="() => showTransfoAchat = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>→ Transformer @docAchatSelectionne.Numero</h2>
+                <button class="btn-close" @onclick="() => showTransfoAchat = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="transfo-info">
+                    <span class="badge @GetBadgeAchat(docAchatSelectionne.TypeDocument)">@docAchatSelectionne.TypeLibelle</span>
+                    <span class="flux-arrow">→</span>
+                    <span class="text-muted small">@docAchatSelectionne.FournisseurNom</span>
+                </div>
+                <div class="transfo-choices" style="margin-top:14px">
+                    @foreach (var td in GetTransfoAchat(docAchatSelectionne.TypeDocument))
+                    {
+                        <button class="transfo-btn" @onclick="() => TransformerAchat(td.Id)">
+                            <span class="badge @GetBadgeAchat(td.Id)">@td.Libelle</span>
+                        </button>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showTransfoAchat = false">Annuler</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ═══════════════════════════════════════════════════════
+   MODAL CLIENT
+═══════════════════════════════════════════════════════ *@
+@if (showModalClient)
+{
+    <div class="modal-overlay" @onclick="() => showModalClient = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@(clientEdite == null ? "+ Nouveau client" : "✎ " + clientEdite.RaisonSociale)</h2>
+                <button class="btn-close" @onclick="() => showModalClient = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale / Nom *</label>
+                        <input class="field-input" @bind="fCRs" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Type</label>
+                        <select class="field-input" @bind="fCType">
+                            <option value="1">Particulier</option>
+                            <option value="2">Professionnel</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email</label>
+                        <input class="field-input" type="email" @bind="fCEmail" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Téléphone</label>
+                        <input class="field-input" @bind="fCTel" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="fCVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Remise (%)</label>
+                        <input class="field-input" type="number" step="0.01" @bind="fCRemise" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Délai paiement (j)</label>
+                        <input class="field-input" type="number" @bind="fCDelai" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Plafond crédit (€)</label>
+                        <input class="field-input" type="number" step="0.01" @bind="fCPlafond" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showModalClient = false">Annuler</button>
+                <button class="btn-primary" @onclick="SauvegarderClient" disabled="@saving">
+                    @(saving ? "Enregistrement…" : clientEdite == null ? "Créer" : "Modifier")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+
+@* ── Création rapide client ──────────────────────────────────────────────── *@
+@if (showCreationClientRapide)
+{
+    <div class="modal-overlay" @onclick="() => showCreationClientRapide = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>+ Nouveau client rapide</h2>
+                <button class="btn-close" @onclick="() => showCreationClientRapide = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale / Nom *</label>
+                        <input class="field-input" @bind="qcRs" placeholder="Nom du client" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Type</label>
+                        <select class="field-input" @bind="qcType">
+                            <option value="1">Particulier</option>
+                            <option value="2">Professionnel</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email</label>
+                        <input class="field-input" type="email" @bind="qcEmail" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Téléphone</label>
+                        <input class="field-input" @bind="qcTel" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="qcVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Remise (%)</label>
+                        <input class="field-input" type="number" step="0.01" @bind="qcRemise" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Délai paiement (j)</label>
+                        <input class="field-input" type="number" @bind="qcDelai" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreationClientRapide = false">Annuler</button>
+                <button class="btn-primary" @onclick="CreerClientRapide" disabled="@saving">
+                    @(saving ? "Création…" : "Créer et sélectionner")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Création rapide fournisseur ──────────────────────────────────────────── *@
+@if (showCreationFournisseurRapide)
+{
+    <div class="modal-overlay" @onclick="() => showCreationFournisseurRapide = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>+ Nouveau fournisseur rapide</h2>
+                <button class="btn-close" @onclick="() => showCreationFournisseurRapide = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale *</label>
+                        <input class="field-input" @bind="qfRs" placeholder="Nom du fournisseur" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email</label>
+                        <input class="field-input" type="email" @bind="qfEmail" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Téléphone</label>
+                        <input class="field-input" @bind="qfTel" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="qfVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Délai livraison (j)</label>
+                        <input class="field-input" type="number" @bind="qfDelai" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreationFournisseurRapide = false">Annuler</button>
+                <button class="btn-primary" @onclick="CreerFournisseurRapide" disabled="@saving">
+                    @(saving ? "Création…" : "Créer et sélectionner")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string onglet = "dashboard";
+    private string? message; private string msgCls = "alert-success";
+    private bool saving = false;
+
+    // Data
+    private CommercialDashboardDto? dash;
+    private List<DocumentVenteDto> ventes = new();
+    private List<DocumentAchatDto> achats = new();
+    private List<ClientDto> clients = new();
+    private List<FournisseurDto> fournisseurs = new();
+    private List<ArticleDto> articles = new();
+
+    // Loading
+    private bool chargementDash=true, chargementVentes=false, chargementAchats=false, chargementClients=false;
+
+    // Filtres
+    private int filtreTypeVente = 0;
+    private int filtreTypeAchat = 0;
+    private string rechercheVente = "", rechercheClient = "";
+    private IEnumerable<DocumentVenteDto> VentesFiltrees => ventes.Where(d =>
+        string.IsNullOrWhiteSpace(rechercheVente) ||
+        d.Numero.Contains(rechercheVente, StringComparison.OrdinalIgnoreCase) ||
+        d.ClientNom.Contains(rechercheVente, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<ClientDto> ClientsFiltres => string.IsNullOrWhiteSpace(rechercheClient) ? clients
+        : clients.Where(c => c.RaisonSociale.Contains(rechercheClient, StringComparison.OrdinalIgnoreCase)
+            || (c.Email??string.Empty).Contains(rechercheClient, StringComparison.OrdinalIgnoreCase));
+
+    private record TypeDocItem(int Id, string Libelle);
+    private static readonly TypeDocItem[] TypesVente = {
+        new(0,"Tous"), new(1,"Devis"), new(2,"Commandes"), new(3,"BL"), new(4,"Factures"), new(5,"Avoirs")
+    };
+    private static readonly TypeDocItem[] TypesAchat = {
+        new(0,"Tous"), new(1,"Demandes"), new(2,"Cdes fourn."), new(3,"Réceptions"), new(4,"Factures fourn."), new(5,"Avoirs fourn.")
+    };
+
+    // Modals
+    private bool showCreationVente=false, showTransfoVente=false, showReglement=false;
+    private bool showCreationAchat=false, showTransfoAchat=false;
+    private bool showModalClient=false;
+    private DocumentVenteDto? docVenteSelectionne;
+    private DocumentAchatDto? docAchatSelectionne;
+    private ClientDto? clientEdite;
+
+    // Tiers search state
+    private string rechercheClientDoc = "";
+    private string rechercheQuatreDoc = "";
+    private string fVClientNom = "";
+    private string fAFournisseurNom = "";
+    private bool showDropdownClient = false;
+    private bool showDropdownFour = false;
+    private List<ClientDto> clientsFiltresDoc = new();
+    private List<FournisseurDto> fournisseursFiltresDoc = new();
+
+    // Quick create client
+    private bool showCreationClientRapide = false;
+    private string qcRs="", qcEmail="", qcTel="", qcVille="";
+    private int qcType=2, qcDelai=30; private decimal qcRemise=0;
+
+    // Quick create fournisseur
+    private bool showCreationFournisseurRapide = false;
+    private string qfRs="", qfEmail="", qfTel="", qfVille="";
+    private int qfDelai=7;
+
+    // Form vente
+    private int fVType=1; private string fVClientId="";
+    private DateTime fVDate=DateTime.Today; private DateTime? fVEcheance;
+    private decimal fVFraisLiv=0, fVAcompte=0; private string fVNotes="";
+    private List<LigneDocRequest> fVLignes = new();
+    private decimal TotalHTVente => fVLignes.Sum(l => l.Quantite * l.PrixUnitaireHT * (1m - l.TauxRemise/100m));
+    private decimal TotalTVAVente => fVLignes.Sum(l => l.Quantite * l.PrixUnitaireHT * (1m - l.TauxRemise/100m) * l.TauxTVA/100m);
+    private decimal TotalTTCVente => TotalHTVente + TotalTVAVente + fVFraisLiv - fVAcompte;
+
+    // Form achat
+    private int fAType=1; private string fAFournisseurId="";
+    private DateTime fADate=DateTime.Today; private DateTime? fADlivPrevue;
+    private decimal fAFraisLiv=0; private string fANotes="";
+    private List<LigneDocRequest> fALignes = new();
+    private decimal TotalHTAchat => fALignes.Sum(l => l.Quantite * l.PrixUnitaireHT * (1m - l.TauxRemise/100m));
+    private decimal TotalTVAAchat => fALignes.Sum(l => l.Quantite * l.PrixUnitaireHT * (1m - l.TauxRemise/100m) * l.TauxTVA/100m);
+    private decimal TotalTTCAchat => TotalHTAchat + TotalTVAAchat + fAFraisLiv;
+
+    // Form client
+    private string fCRs="", fCEmail="", fCTel="", fCVille="";
+    private int fCType=2, fCDelai=30; private decimal fCRemise=0, fCPlafond=0;
+
+    // Règlement
+    private decimal rMontant=0; private int rMode=1;
+    private DateTime rDate=DateTime.Today; private string rRef="";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Charge le dashboard + données de base en parallèle
+        await Task.WhenAll(
+            Task.Run(async () => dash = await Api.GetCommercialDashboardAsync()),
+            Task.Run(async () => clients = await Api.GetClientsAsync() ?? new()),
+            Task.Run(async () => {
+                var r = await Api.GetFournisseursAsync(1, 500);
+                fournisseurs = r?.Items.ToList() ?? new();
+            }),
+            Task.Run(async () => {
+                var r = await Api.GetArticlesAsync(1, 500, null, null);
+                articles = r?.Items.ToList() ?? new();
+            })
+        );
+        chargementDash = false;
+    }
+
+    private async Task SetOnglet(string tab)
+    {
+        onglet = tab;
+        message = null;
+        if (tab == "ventes" && !ventes.Any()) await ChargerVentes();
+        else if (tab == "achats" && !achats.Any()) await ChargerAchats();
+        else if (tab == "clients" && !clients.Any()) { chargementClients=true; clients=await Api.GetClientsAsync()??new(); chargementClients=false; }
+    }
+
+    private async Task ChargerVentes()
+    {
+        chargementVentes=true;
+        ventes = await Api.GetVentesAsync(filtreTypeVente==0?null:filtreTypeVente) ?? new();
+        chargementVentes=false;
+    }
+
+    private async Task ChargerAchats()
+    {
+        chargementAchats=true;
+        achats = await Api.GetAchatsCommAsync(filtreTypeAchat==0?null:filtreTypeAchat) ?? new();
+        chargementAchats=false;
+    }
+
+    private async Task SetFiltreVente(int type)
+    { filtreTypeVente=type; await ChargerVentes(); }
+
+    private async Task SetFiltreAchat(int type)
+    { filtreTypeAchat=type; await ChargerAchats(); }
+
+    // ── Ventes CRUD ──────────────────────────────────────────────────────────
+    // ── Tiers search methods ──────────────────────────────────────────────────
+    private void FiltrerClients(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        rechercheClientDoc = e.Value?.ToString() ?? "";
+        showDropdownClient = true;
+        clientsFiltresDoc = string.IsNullOrWhiteSpace(rechercheClientDoc)
+            ? clients.Take(8).ToList()
+            : clients.Where(c => c.RaisonSociale.Contains(rechercheClientDoc, StringComparison.OrdinalIgnoreCase)
+                               || c.Code.Contains(rechercheClientDoc, StringComparison.OrdinalIgnoreCase)
+                               || (c.Email??string.Empty).Contains(rechercheClientDoc, StringComparison.OrdinalIgnoreCase))
+                     .Take(8).ToList();
+    }
+
+    private void SelectClient(ClientDto cl)
+    {
+        fVClientId = cl.Id.ToString();
+        fVClientNom = cl.RaisonSociale;
+        rechercheClientDoc = "";
+        showDropdownClient = false;
+        clientsFiltresDoc = new();
+    }
+
+    private void DeselectClient()
+    { fVClientId=""; fVClientNom=""; rechercheClientDoc=""; showDropdownClient=false; }
+
+    private void FiltrerFournisseurs(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        rechercheQuatreDoc = e.Value?.ToString() ?? "";
+        showDropdownFour = true;
+        fournisseursFiltresDoc = string.IsNullOrWhiteSpace(rechercheQuatreDoc)
+            ? fournisseurs.Take(8).ToList()
+            : fournisseurs.Where(f => f.RaisonSociale.Contains(rechercheQuatreDoc, StringComparison.OrdinalIgnoreCase)
+                                  || f.Code.Contains(rechercheQuatreDoc, StringComparison.OrdinalIgnoreCase))
+                         .Take(8).ToList();
+    }
+
+    private void SelectFournisseur(FournisseurDto f)
+    {
+        fAFournisseurId = f.Id.ToString();
+        fAFournisseurNom = f.RaisonSociale;
+        rechercheQuatreDoc = "";
+        showDropdownFour = false;
+        fournisseursFiltresDoc = new();
+    }
+
+    private void DeselectFournisseur()
+    { fAFournisseurId=""; fAFournisseurNom=""; rechercheQuatreDoc=""; showDropdownFour=false; }
+
+    // ── Quick create ───────────────────────────────────────────────────────────
+    private void OuvrirCreationClientRapide()
+    {
+        qcRs=rechercheClientDoc; qcEmail=qcTel=qcVille=""; qcType=2; qcDelai=30; qcRemise=0;
+        showDropdownClient=false; showCreationClientRapide=true;
+    }
+
+    private async Task CreerClientRapide()
+    {
+        if (string.IsNullOrWhiteSpace(qcRs)) { message="Nom obligatoire."; msgCls="alert-error"; return; }
+        saving=true;
+        var r = await Api.CreerClientAsync(new ClientRequest {
+            RaisonSociale=qcRs, TypeClient=qcType, Email=qcEmail,
+            Telephone=qcTel, Ville=qcVille, DelaiPaiementJours=qcDelai, TauxRemise=qcRemise
+        });
+        saving=false;
+        if (r?.Succes == true)
+        {
+            // Recharger les clients et sélectionner automatiquement le nouveau
+            clients = await Api.GetClientsAsync() ?? new();
+            var nouveau = clients.FirstOrDefault(cl =>
+                cl.RaisonSociale.Equals(qcRs, StringComparison.OrdinalIgnoreCase));
+            if (nouveau != null) SelectClient(nouveau);
+            showCreationClientRapide = false;
+            message = $"Client \"{qcRs}\" créé et sélectionné.";
+            msgCls = "alert-success";
+        }
+        else { message = r?.Message ?? "Erreur."; msgCls = "alert-error"; }
+    }
+
+    private void OuvrirCreationFournisseurRapide()
+    {
+        qfRs=rechercheQuatreDoc; qfEmail=qfTel=qfVille=""; qfDelai=7;
+        showDropdownFour=false; showCreationFournisseurRapide=true;
+    }
+
+    private async Task CreerFournisseurRapide()
+    {
+        if (string.IsNullOrWhiteSpace(qfRs)) { message="Nom obligatoire."; msgCls="alert-error"; return; }
+        saving=true;
+        // Génère un code auto basé sur le nom
+        var qfCode = "F" + qfRs.Replace(" ","").ToUpperInvariant()[..Math.Min(4, qfRs.Replace(" ","").Length)];
+        var r = await Api.CreerFournisseurAsync(new CreerFournisseurDto(
+            Code: qfCode, RaisonSociale: qfRs, Siret: "",
+            Email: qfEmail, Telephone: qfTel, Adresse: "",
+            Ville: qfVille, CodePostal: "", Pays: "France",
+            DelaiLivraisonJours: qfDelai
+        ));
+        saving=false;
+        if (r?.Succes == true)
+        {
+            var paged = await Api.GetFournisseursAsync(1, 500);
+            fournisseurs = paged?.Items.ToList() ?? new();
+            var nouveau = fournisseurs.FirstOrDefault(f =>
+                f.RaisonSociale.Equals(qfRs, StringComparison.OrdinalIgnoreCase));
+            if (nouveau != null) SelectFournisseur(nouveau);
+            showCreationFournisseurRapide = false;
+            message = $"Fournisseur \"{qfRs}\" créé et sélectionné.";
+            msgCls = "alert-success";
+        }
+        else { message = r?.Message ?? "Erreur."; msgCls = "alert-error"; }
+    }
+
+    private void OuvrirCreationVente()
+    {
+        fVType=1; fVClientId=""; fVClientNom=""; rechercheClientDoc="";
+        clientsFiltresDoc=new(); showDropdownClient=false;
+        fVDate=DateTime.Today; fVEcheance=null;
+        fVFraisLiv=0; fVAcompte=0; fVNotes=""; fVLignes=new();
+        showCreationVente=true;
+    }
+    private void AjouterLigneVente() => fVLignes.Add(new LigneDocRequest { TauxTVA=20 });
+    private void SupprimerLigneVente(int i) => fVLignes.RemoveAt(i);
+    private void OnArticleSelectVente(int idx)
+    {
+        var l = fVLignes[idx];
+        var a = articles.FirstOrDefault(x => x.Id == l.ArticleId);
+        if (a != null) { l.Designation=a.Designation; l.PrixUnitaireHT=a.PrixAchat; }
+    }
+
+    private async Task CreerDocumentVente()
+    {
+        if (!Guid.TryParse(fVClientId, out var cid)) { message="Client obligatoire."; msgCls="alert-error"; return; }
+        if (!fVLignes.Any()) { message="Ajoutez au moins une ligne."; msgCls="alert-error"; return; }
+        saving=true;
+        var r = await Api.CreerVenteAsync(new DocumentVenteRequest {
+            TypeDocument=fVType, ClientId=cid, DateDocument=fVDate, DateEcheance=fVEcheance,
+            FraisLivraison=fVFraisLiv, MontantAcompte=fVAcompte, NotesExterne=fVNotes,
+            Lignes=fVLignes.Select(l => new LigneDocRequest {
+                ArticleId=l.ArticleId, Designation=l.Designation, Quantite=l.Quantite,
+                PrixUnitaireHT=l.PrixUnitaireHT, TauxRemise=l.TauxRemise, TauxTVA=l.TauxTVA
+            }).ToList()
+        });
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) { showCreationVente=false; await ChargerVentes(); }
+    }
+
+    private async Task ValiderVente(DocumentVenteDto d)
+    {
+        var r = await Api.ValiderVenteAsync(d.Id);
+        msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) await ChargerVentes();
+    }
+
+    private async Task AnnulerVente(DocumentVenteDto d)
+    {
+        var r = await Api.AnnulerVenteAsync(d.Id);
+        msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) await ChargerVentes();
+    }
+
+    private void OuvrirTransfo(DocumentVenteDto d) { docVenteSelectionne=d; showTransfoVente=true; }
+
+    private async Task TransformerVente(int typeDoc)
+    {
+        if (docVenteSelectionne==null) return;
+        saving=true;
+        var r = await Api.TransformerVenteAsync(docVenteSelectionne.Id, typeDoc);
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) { showTransfoVente=false; await ChargerVentes(); }
+    }
+
+    private void OuvrirReglement(DocumentVenteDto d)
+    { docVenteSelectionne=d; rMontant=d.Solde; rMode=1; rDate=DateTime.Today; rRef=""; showReglement=true; }
+
+    private async Task EnregistrerReglement()
+    {
+        if (docVenteSelectionne==null || rMontant<=0) { message="Montant invalide."; msgCls="alert-error"; return; }
+        saving=true;
+        var r = await Api.AjouterReglementVenteAsync(docVenteSelectionne.Id,
+            new ReglementRequest { Montant=rMontant, ModeReglement=rMode, DateReglement=rDate, Reference=rRef });
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) { showReglement=false; await ChargerVentes(); }
+    }
+
+    // ── Achats CRUD ──────────────────────────────────────────────────────────
+    private void OuvrirCreationAchat()
+    {
+        fAType=1; fAFournisseurId=""; fAFournisseurNom=""; rechercheQuatreDoc="";
+        fournisseursFiltresDoc=new(); showDropdownFour=false;
+        fADate=DateTime.Today; fADlivPrevue=null;
+        fAFraisLiv=0; fANotes=""; fALignes=new();
+        showCreationAchat=true;
+    }
+    private void AjouterLigneAchat() => fALignes.Add(new LigneDocRequest { TauxTVA=20 });
+    private void SupprimerLigneAchat(int i) => fALignes.RemoveAt(i);
+    private void OnArticleSelectAchat(int idx)
+    {
+        var l = fALignes[idx];
+        var a = articles.FirstOrDefault(x => x.Id == l.ArticleId);
+        if (a != null) { l.Designation=a.Designation; l.PrixUnitaireHT=a.PrixAchat; }
+    }
+
+    private async Task CreerDocumentAchat()
+    {
+        if (!Guid.TryParse(fAFournisseurId, out var fid)) { message="Fournisseur obligatoire."; msgCls="alert-error"; return; }
+        if (!fALignes.Any()) { message="Ajoutez au moins une ligne."; msgCls="alert-error"; return; }
+        saving=true;
+        var r = await Api.CreerAchatCommAsync(new DocumentAchatRequest {
+            TypeDocument=fAType, FournisseurId=fid, DateDocument=fADate,
+            DateLivraisonPrevue=fADlivPrevue, FraisLivraison=fAFraisLiv, NotesInternes=fANotes,
+            Lignes=fALignes.Select(l => new LigneDocRequest {
+                ArticleId=l.ArticleId, Designation=l.Designation, Quantite=l.Quantite,
+                PrixUnitaireHT=l.PrixUnitaireHT, TauxRemise=l.TauxRemise, TauxTVA=l.TauxTVA
+            }).ToList()
+        });
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) { showCreationAchat=false; await ChargerAchats(); }
+    }
+
+    private void OuvrirTransfoAchat(DocumentAchatDto d) { docAchatSelectionne=d; showTransfoAchat=true; }
+
+    private async Task TransformerAchat(int typeDoc)
+    {
+        if (docAchatSelectionne==null) return;
+        saving=true; showTransfoAchat=false;
+        message="Transformation en cours…"; msgCls="alert-success";
+        await ChargerAchats();
+        saving=false;
+    }
+
+    // ── Clients CRUD ─────────────────────────────────────────────────────────
+    private void OuvrirCreationClient()
+    {
+        clientEdite=null; fCRs=fCEmail=fCTel=fCVille="";
+        fCType=2; fCDelai=30; fCRemise=0; fCPlafond=0;
+        showModalClient=true;
+    }
+    private void OuvrirEditionClient(ClientDto c)
+    {
+        clientEdite=c; fCRs=c.RaisonSociale; fCEmail=c.Email??"";
+        fCTel=c.Telephone??""; fCVille=c.Ville??""; fCType=c.TypeClient;
+        fCDelai=c.DelaiPaiementJours; fCRemise=c.TauxRemise; fCPlafond=c.PlafondCredit;
+        showModalClient=true;
+    }
+    private void VoirDocumentsClient(ClientDto c)
+    {
+        onglet="ventes"; rechercheVente=c.RaisonSociale;
+        _ = ChargerVentes();
+    }
+    private async Task SauvegarderClient()
+    {
+        if (string.IsNullOrWhiteSpace(fCRs)) { message="Raison sociale obligatoire."; msgCls="alert-error"; return; }
+        saving=true;
+        var dto = new ClientRequest { RaisonSociale=fCRs, TypeClient=fCType, Email=fCEmail,
+            Telephone=fCTel, Ville=fCVille, DelaiPaiementJours=fCDelai,
+            TauxRemise=fCRemise, PlafondCredit=fCPlafond };
+        ResultDto? r;
+        if (clientEdite==null) r = await Api.CreerClientAsync(dto);
+        else r = await Api.ModifierClientAsync(clientEdite.Id, dto);
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true)
+        {
+            showModalClient=false;
+            chargementClients=true;
+            clients=await Api.GetClientsAsync()??new();
+            chargementClients=false;
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    private record TransfoItem(int Id, string Libelle);
+    private IEnumerable<TransfoItem> GetTransfoVente(int type) => type switch {
+        1 => new[]{ new TransfoItem(2,"Commande"), new TransfoItem(4,"Facture directe") },
+        2 => new[]{ new TransfoItem(3,"Bon de livraison"), new TransfoItem(4,"Facture") },
+        3 => new[]{ new TransfoItem(4,"Facture") },
+        4 => new[]{ new TransfoItem(5,"Avoir client") },
+        _ => Array.Empty<TransfoItem>()
+    };
+    private IEnumerable<TransfoItem> GetTransfoAchat(int type) => type switch {
+        1 => new[]{ new TransfoItem(2,"Commande fournisseur") },
+        2 => new[]{ new TransfoItem(3,"Bon de réception"), new TransfoItem(4,"Facture fournisseur") },
+        3 => new[]{ new TransfoItem(4,"Facture fournisseur") },
+        4 => new[]{ new TransfoItem(5,"Avoir fournisseur") },
+        _ => Array.Empty<TransfoItem>()
+    };
+
+    private string GetBadgeVente(int t) => t switch {
+        1=>"badge-gray", 2=>"badge-blue", 3=>"badge-teal", 4=>"badge-green", 5=>"badge-amber", _=>"badge-gray" };
+    private string GetBadgeAchat(int t) => t switch {
+        1=>"badge-gray", 2=>"badge-blue", 3=>"badge-teal", 4=>"badge-amber", 5=>"badge-red", _=>"badge-gray" };
+    private string GetStatutBadgeVente(int s) => s switch {
+        1=>"badge-gray",2=>"badge-blue",3=>"badge-blue",4=>"badge-blue",
+        5=>"badge-amber",6=>"badge-teal",7=>"badge-amber",8=>"badge-amber",
+        9=>"badge-green",10=>"badge-red",11=>"badge-gray",_=>"badge-gray" };
+    private string GetStatutBadgeAchat(int s) => s switch {
+        1=>"badge-gray",2=>"badge-blue",3=>"badge-blue",4=>"badge-teal",
+        5=>"badge-teal",6=>"badge-amber",7=>"badge-amber",8=>"badge-green",
+        9=>"badge-red",10=>"badge-gray",_=>"badge-gray" };
+}

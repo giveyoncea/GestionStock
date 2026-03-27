@@ -1,0 +1,694 @@
+﻿@page "/reglements"
+@page "/commercial/reglements"
+@attribute [Authorize]
+@inject IApiService Api
+@inject IPrintService PrintService
+@inject ICurrencyService CurrencyService
+
+<PageTitle>Règlements & acomptes - GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Règlements & acomptes</h1>
+        <p class="page-date">Encaissements clients · Décaissements fournisseurs</p>
+    </div>
+    <div class="header-actions">
+        @if (onglet == "acomptes-clients")
+        {
+            <button class="btn-primary" @onclick="OuvrirCreationAcompte">+ Acompte client</button>
+        }
+        else if (onglet == "acomptes-fourn")
+        {
+            <button class="btn-primary" @onclick="OuvrirCreationAcompteFourn">+ Acompte fournisseur</button>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message)) { <div class="@msgCls">@message</div> }
+
+@* â”€â”€ Onglets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+<div class="comm-tabs">
+    <button class="comm-tab @(onglet=="regl-clients"?"comm-tab--active":"")" @onclick="SetOngletReglClients">
+        Encaissements clients
+    </button>
+    <button class="comm-tab @(onglet=="regl-fourn"?"comm-tab--active":"")" @onclick="SetOngletReglFourn">
+        Décaissements fournisseurs
+    </button>
+    <button class="comm-tab @(onglet=="acomptes-clients"?"comm-tab--active":"")" @onclick="SetOngletAcomptesClients">
+        Acomptes clients
+    </button>
+    <button class="comm-tab @(onglet=="acomptes-fourn"?"comm-tab--active":"")" @onclick="SetOngletAcomptesFourn">
+        Acomptes fournisseurs
+    </button>
+</div>
+
+@* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ENCAISSEMENTS CLIENTS
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• *@
+@if (onglet == "regl-clients")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar-filters">
+            <select class="field-input" style="width:160px" @bind="filtreMode" @bind:after="ChargerReglClients">
+                <option value="0">Tous modes</option>
+                @foreach (var m in Modes) { <option value="@m.Id">@m.Libelle</option> }
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@reglClients.Count encaissement(s)</span>
+            <span class="record-count" style="font-weight:700;color:var(--col-green)">
+                Total : @reglClients.Sum(r => r.Montant).ToString("N2") F
+            </span>
+        </div>
+    </div>
+    @RenderTableReglements(reglClients, chargementRC)
+}
+
+@* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   DÉCAISSEMENTS FOURNISSEURS
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• *@
+@if (onglet == "regl-fourn")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar-filters">
+            <select class="field-input" style="width:160px" @bind="filtreModeFourn" @bind:after="ChargerReglFourn">
+                <option value="0">Tous modes</option>
+                @foreach (var m in Modes) { <option value="@m.Id">@m.Libelle</option> }
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@reglFourn.Count décaissement(s)</span>
+            <span class="record-count" style="font-weight:700;color:var(--col-red)">
+                Total : @reglFourn.Sum(r => r.Montant).ToString("N2") F
+            </span>
+        </div>
+    </div>
+    @RenderTableReglements(reglFourn, chargementRF)
+}
+
+@* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ACOMPTES CLIENTS
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• *@
+@if (onglet == "acomptes-clients")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar-filters">
+            <label class="check-label">
+                <input type="checkbox" @bind="nonUtilisesC" @bind:after="ChargerAcomptesClients" />
+                Disponibles uniquement
+            </label>
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@acomptesClients.Count acompte(s)</span>
+            <span class="record-count" style="color:var(--col-amber)">
+                Disponible : @acomptesClients.Where(a => !a.EstUtilise).Sum(a => a.MontantDisponible).ToString("N2") F
+            </span>
+        </div>
+    </div>
+    @RenderTableAcomptes(acomptesClients, chargementAC, true)
+}
+
+@* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ACOMPTES FOURNISSEURS
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• *@
+@if (onglet == "acomptes-fourn")
+{
+    <div class="toolbar" style="margin-top:12px">
+        <div class="toolbar-filters">
+            <label class="check-label">
+                <input type="checkbox" @bind="nonUtilisesF" @bind:after="ChargerAcomptesFourn" />
+                Disponibles uniquement
+            </label>
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@acomptesFourn.Count acompte(s)</span>
+            <span class="record-count" style="color:var(--col-amber)">
+                Disponible : @acomptesFourn.Where(a => !a.EstUtilise).Sum(a => a.MontantDisponible).ToString("N2") F
+            </span>
+        </div>
+    </div>
+    @RenderTableAcomptes(acomptesFourn, chargementAF, false)
+}
+
+@* â”€â”€â”€ Render helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* â”€â”€â”€ MODAL ACOMPTE CLIENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showCreationAcompte)
+{
+    <div class="modal-overlay" @onclick="() => showCreationAcompte = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Nouvel acompte client</h2>
+                <button class="btn-close" @onclick="() => showCreationAcompte = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Client *</label>
+                        <select class="field-input" @bind="aTiersId">
+                            <option value="">- Sélectionner -</option>
+                            @foreach (var c in clients)
+                            { <option value="@c.Id">@c.RaisonSociale</option> }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Montant *</label>
+                        <input class="field-input" type="number" step="0.01" @bind="aMontant" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Mode paiement</label>
+                        <select class="field-input" @bind="aMode">
+                            @foreach (var m in Modes) { <option value="@m.Id">@m.Libelle</option> }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date</label>
+                        <input class="field-input" type="date" @bind="aDate" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Référence</label>
+                        <input class="field-input" @bind="aRef" placeholder="N° chèque, virement..." />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Notes</label>
+                        <textarea class="field-input" rows="2" @bind="aNotes"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreationAcompte = false">Annuler</button>
+                <button class="btn-primary" @onclick="() => CreerAcompte(estClient: true)" disabled="@saving">
+                    @(saving ? "Enregistrement..." : "Enregistrer")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* â”€â”€â”€ MODAL ACOMPTE FOURNISSEUR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showCreationAcompteFourn)
+{
+    <div class="modal-overlay" @onclick="() => showCreationAcompteFourn = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Nouvel acompte fournisseur</h2>
+                <button class="btn-close" @onclick="() => showCreationAcompteFourn = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Fournisseur *</label>
+                        <select class="field-input" @bind="aTiersId">
+                            <option value="">- Sélectionner -</option>
+                            @foreach (var f in fournisseurs)
+                            { <option value="@f.Id">@f.RaisonSociale</option> }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Montant *</label>
+                        <input class="field-input" type="number" step="0.01" @bind="aMontant" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Mode paiement</label>
+                        <select class="field-input" @bind="aMode">
+                            @foreach (var m in Modes) { <option value="@m.Id">@m.Libelle</option> }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date</label>
+                        <input class="field-input" type="date" @bind="aDate" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Référence</label>
+                        <input class="field-input" @bind="aRef" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Notes</label>
+                        <textarea class="field-input" rows="2" @bind="aNotes"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreationAcompteFourn = false">Annuler</button>
+                <button class="btn-primary" @onclick="() => CreerAcompte(estClient: false)" disabled="@saving">
+                    @(saving ? "Enregistrement..." : "Enregistrer")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* â”€â”€â”€ MODAL IMPUTATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showImputation && acompteAImputer != null)
+{
+    <div class="modal-overlay" @onclick="() => showImputation = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Imputer - @(acompteAImputer.ClientNom ?? acompteAImputer.FournisseurNom)</h2>
+                <button class="btn-close" @onclick="() => showImputation = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="acompte-detail-banner">
+                    <span>Disponible : <strong class="text-success">@acompteAImputer.MontantDisponible.ToString("N2") F</strong></span>
+                    <span>Réf. : <em>@(acompteAImputer.Reference ?? "-")</em></span>
+                </div>
+                <div class="field-group" style="margin-top:12px">
+                    <label class="field-label">Montant à imputer (0 = tout utiliser)</label>
+                    <input class="field-input" type="number" step="0.01" @bind="imputationMontant" />
+                </div>
+                <div style="margin-top:14px">
+                    <label class="field-label">Facture à solder</label>
+                    @if (chargementDocs) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+                    else if (!documentsImputables.Any())
+                    {
+                        <div class="empty-state">Aucune facture non soldée pour ce tiers.</div>
+                    }
+                    else
+                    {
+                        <div class="table-container" style="max-height:240px;overflow-y:auto">
+                            <table class="data-table" style="font-size:12px">
+                                <thead><tr>
+                                    <th>N° document</th><th>Date</th>
+                                    <th class="text-right">TTC</th><th class="text-right">Solde</th><th></th>
+                                </tr></thead>
+                                <tbody>
+                                @foreach (var d in documentsImputables)
+                                {
+                                    <tr>
+                                        <td><code>@d.Numero</code></td>
+                                        <td class="text-muted small">@d.DateDocument.ToString("dd/MM/yyyy")</td>
+                                        <td class="text-right mono">@d.MontantTTC.ToString("N2") F</td>
+                                        <td class="text-right mono text-warn">@d.Solde.ToString("N2") F</td>
+                                        <td>
+                                            <button class="btn-primary" style="font-size:11px;padding:4px 10px"
+                                                    @onclick="() => ConfirmerImputation(d)" disabled="@saving">
+                                                Imputer
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showImputation = false">Fermer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showConsultReglement && reglementSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="FermerConsultationReglement">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Consultation règlement</h2>
+                <button class="btn-close" @onclick="FermerConsultationReglement">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group"><label class="field-label">Document</label><div class="field-input">@(reglementSelectionne.NumeroDoc ?? "-")</div></div>
+                    <div class="field-group"><label class="field-label">Tiers</label><div class="field-input">@(reglementSelectionne.TiersNom ?? "-")</div></div>
+                    <div class="field-group"><label class="field-label">Date</label><div class="field-input">@reglementSelectionne.DateReglement.ToString("dd/MM/yyyy")</div></div>
+                    <div class="field-group"><label class="field-label">Mode</label><div class="field-input">@reglementSelectionne.ModeLibelle</div></div>
+                    <div class="field-group"><label class="field-label">Montant</label><div class="field-input">@reglementSelectionne.Montant.ToString("N2") F</div></div>
+                    <div class="field-group"><label class="field-label">Référence</label><div class="field-input">@(string.IsNullOrWhiteSpace(reglementSelectionne.Reference) ? "-" : reglementSelectionne.Reference)</div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="FermerConsultationReglement">Fermer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showConsultAcompte && acompteSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="FermerConsultationAcompte">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Consultation acompte</h2>
+                <button class="btn-close" @onclick="FermerConsultationAcompte">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group"><label class="field-label">Tiers</label><div class="field-input">@(acompteSelectionne.ClientNom ?? acompteSelectionne.FournisseurNom ?? "-")</div></div>
+                    <div class="field-group"><label class="field-label">Date</label><div class="field-input">@acompteSelectionne.DateAcompte.ToString("dd/MM/yyyy")</div></div>
+                    <div class="field-group"><label class="field-label">Mode</label><div class="field-input">@acompteSelectionne.ModeLibelle</div></div>
+                    <div class="field-group"><label class="field-label">Montant</label><div class="field-input">@acompteSelectionne.Montant.ToString("N2") F</div></div>
+                    <div class="field-group"><label class="field-label">Disponible</label><div class="field-input">@acompteSelectionne.MontantDisponible.ToString("N2") F</div></div>
+                    <div class="field-group"><label class="field-label">Référence</label><div class="field-input">@(string.IsNullOrWhiteSpace(acompteSelectionne.Reference) ? "-" : acompteSelectionne.Reference)</div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="FermerConsultationAcompte">Fermer</button>
+            </div>
+        </div>
+    </div>
+}
+@code {
+    // â”€â”€ Ã‰tat gÃ©nÃ©ral â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private string onglet = "regl-clients";
+    private string? message; private string msgCls = "alert-success";
+    private bool saving = false;
+
+    // â”€â”€ DonnÃ©es â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private List<ReglementDto> reglClients = new();
+    private List<ReglementDto> reglFourn = new();
+    private List<AcompteDto> acomptesClients = new();
+    private List<AcompteDto> acomptesFourn = new();
+    private List<ClientDto> clients = new();
+    private List<FournisseurDto> fournisseurs = new();
+
+    // â”€â”€ Chargement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private bool chargementRC=true, chargementRF=false, chargementAC=false, chargementAF=false, chargementDocs=false;
+    private int filtreMode=0, filtreModeFourn=0;
+    private bool nonUtilisesC=false, nonUtilisesF=false;
+
+    // â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private bool showCreationAcompte=false, showCreationAcompteFourn=false, showImputation=false;
+    private bool showConsultReglement=false, showConsultAcompte=false;
+    private ReglementDto? reglementSelectionne;
+    private AcompteDto? acompteSelectionne;
+    private AcompteDto? acompteAImputer;
+    private List<DocumentVenteDto> documentsImputables = new();
+    private decimal imputationMontant=0;
+    private string aTiersId=""; private decimal aMontant=0; private int aMode=1;
+    private DateTime aDate=DateTime.Today; private string aRef="", aNotes="";
+
+    private record ModeItem(int Id, string Libelle);
+    private static string LibellePropre(string? valeur)
+    {
+        if (string.IsNullOrWhiteSpace(valeur)) return "-";
+        return valeur
+            .Replace("EspÃ¨ces", "Espèces").Replace("EspÃƒÂ¨ces", "Espèces")
+            .Replace("ChÃ¨que", "Chèque").Replace("ChÃƒÂ¨que", "Chèque")
+            .Replace("PrÃ©lÃ¨vement", "Prélèvement").Replace("PrÃƒÂ©lÃƒÂ¨vement", "Prélèvement")
+            .Replace("RÃ©fÃ©rence", "Référence")
+            .Replace("RÃ¨glement", "Règlement");
+    }
+
+    private static readonly ModeItem[] Modes = {
+        new(1,"Espèces"), new(2,"Chèque"), new(3,"Virement"),
+        new(4,"Carte bancaire"), new(5,"Prélèvement"), new(6,"Traite"), new(7,"Autre")
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            ChargerReglClients(),
+            Task.Run(async () => clients = await Api.GetClientsAsync() ?? new()),
+            Task.Run(async () => {
+                var r = await Api.GetFournisseursAsync(1, 500);
+                fournisseurs = r?.Items.ToList() ?? new();
+            })
+        );
+    }
+
+    // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private async Task SetOngletReglClients()
+    {
+        onglet = "regl-clients";
+        if (!reglClients.Any()) await ChargerReglClients();
+    }
+    private async Task SetOngletReglFourn()
+    {
+        onglet = "regl-fourn";
+        if (!reglFourn.Any()) await ChargerReglFourn();
+    }
+    private async Task SetOngletAcomptesClients()
+    {
+        onglet = "acomptes-clients";
+        await ChargerAcomptesClients();
+    }
+    private async Task SetOngletAcomptesFourn()
+    {
+        onglet = "acomptes-fourn";
+        await ChargerAcomptesFourn();
+    }
+
+    // â”€â”€ Chargement donnÃ©es â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private async Task ChargerReglClients()
+    {
+        chargementRC = true;
+        var all = await Api.GetReglementsAsync(typeDocument: 1) ?? new();
+        reglClients = filtreMode == 0 ? all : all.Where(r => r.ModeReglement == filtreMode).ToList();
+        chargementRC = false;
+    }
+    private async Task ChargerReglFourn()
+    {
+        chargementRF = true;
+        var all = await Api.GetReglementsAsync(typeDocument: 2) ?? new();
+        reglFourn = filtreModeFourn == 0 ? all : all.Where(r => r.ModeReglement == filtreModeFourn).ToList();
+        chargementRF = false;
+    }
+    private async Task ChargerAcomptesClients()
+    {
+        chargementAC = true;
+        var all = await Api.GetAcomptesAsync() ?? new();
+        acomptesClients = all.Where(a => a.ClientId != null && (!nonUtilisesC || !a.EstUtilise)).ToList();
+        chargementAC = false;
+    }
+    private async Task ChargerAcomptesFourn()
+    {
+        chargementAF = true;
+        var all = await Api.GetAcomptesAsync() ?? new();
+        acomptesFourn = all.Where(a => a.FournisseurId != null && (!nonUtilisesF || !a.EstUtilise)).ToList();
+        chargementAF = false;
+    }
+
+    private void OuvrirConsultationReglement(ReglementDto r)
+    {
+        reglementSelectionne = r;
+        showConsultReglement = true;
+    }
+
+    private void FermerConsultationReglement()
+    {
+        showConsultReglement = false;
+        reglementSelectionne = null;
+    }
+
+    private void OuvrirConsultationAcompte(AcompteDto a)
+    {
+        acompteSelectionne = a;
+        showConsultAcompte = true;
+    }
+
+    private void FermerConsultationAcompte()
+    {
+        showConsultAcompte = false;
+        acompteSelectionne = null;
+    }
+    private async Task ImprimerReglementAsync(ReglementDto r)
+    {
+        reglementSelectionne = r;
+        await ImprimerReglementSelectionneAsync();
+    }
+
+    private async Task ImprimerReglementSelectionneAsync()
+    {
+        if (reglementSelectionne == null) return;
+        try
+        {
+            await CurrencyService.EnsureLoadedAsync();
+            var parametres = await Api.GetParametresAsync();
+            if (parametres == null) { message = "Impossible de charger les parametres d'impression."; msgCls = "alert-error"; return; }
+            await PrintService.PrintReglementAsync(reglementSelectionne, parametres, CurrencyService);
+        }
+        catch
+        {
+            message = "Impossible d'imprimer ce reçu pour le moment.";
+            msgCls = "alert-error";
+        }
+    }
+
+    private async Task ImprimerAcompteAsync(AcompteDto a)
+    {
+        acompteSelectionne = a;
+        await ImprimerAcompteSelectionneAsync();
+    }
+
+    private async Task ImprimerAcompteSelectionneAsync()
+    {
+        if (acompteSelectionne == null) return;
+        try
+        {
+            await CurrencyService.EnsureLoadedAsync();
+            var parametres = await Api.GetParametresAsync();
+            if (parametres == null) { message = "Impossible de charger les parametres d'impression."; msgCls = "alert-error"; return; }
+            await PrintService.PrintAcompteAsync(acompteSelectionne, parametres, CurrencyService);
+        }
+        catch
+        {
+            message = "Impossible d'imprimer ce reçu pour le moment.";
+            msgCls = "alert-error";
+        }
+    }
+
+
+    // â”€â”€ Actions rÃ¨glements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private async Task SupprimerReglement(ReglementDto r)
+    {
+        var res = await Api.SupprimerReglementAsync(r.Id);
+        msgCls = res?.Succes == true ? "alert-success" : "alert-error";
+        message = res?.Message;
+        if (res?.Succes == true)
+        {
+            if (onglet == "regl-clients") await ChargerReglClients();
+            else await ChargerReglFourn();
+        }
+    }
+
+    // â”€â”€ Actions acomptes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private void OuvrirCreationAcompte()
+    {
+        aTiersId=""; aMontant=0; aMode=1; aDate=DateTime.Today; aRef=""; aNotes="";
+        showCreationAcompte=true;
+    }
+    private void OuvrirCreationAcompteFourn()
+    {
+        aTiersId=""; aMontant=0; aMode=1; aDate=DateTime.Today; aRef=""; aNotes="";
+        showCreationAcompteFourn=true;
+    }
+    private async Task CreerAcompte(bool estClient)
+    {
+        if (!Guid.TryParse(aTiersId, out var tiersGuid) || aMontant <= 0)
+        {
+            message="Tiers et montant obligatoires."; msgCls="alert-error"; return;
+        }
+        saving=true;
+        var dto = new AcompteRequest {
+            Montant=aMontant, ModeReglement=aMode, DateAcompte=aDate,
+            Reference=string.IsNullOrWhiteSpace(aRef)?null:aRef,
+            Notes=string.IsNullOrWhiteSpace(aNotes)?null:aNotes
+        };
+        if (estClient) dto.ClientId=tiersGuid; else dto.FournisseurId=tiersGuid;
+        var r = await Api.CreerAcompteAsync(dto);
+        saving=false;
+        msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true)
+        {
+            showCreationAcompte=false; showCreationAcompteFourn=false;
+            if (estClient) await ChargerAcomptesClients();
+            else await ChargerAcomptesFourn();
+        }
+    }
+    private async Task OuvrirImputation(AcompteDto a)
+    {
+        acompteAImputer=a; imputationMontant=0; documentsImputables=new();
+        showImputation=true; chargementDocs=true;
+        var ventes = await Api.GetVentesAsync(type:4) ?? new();
+        documentsImputables = ventes
+            .Where(v => v.ClientId==a.ClientId && !v.EstVerrouille && v.Solde>0)
+            .ToList();
+        chargementDocs=false;
+    }
+    private async Task ConfirmerImputation(DocumentVenteDto doc)
+    {
+        if (acompteAImputer==null) return;
+        saving=true;
+        var r = await Api.ImputerAcompteAsync(acompteAImputer.Id, doc.Id, imputationMontant);
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) { showImputation=false; await ChargerAcomptesClients(); }
+    }
+
+    // â”€â”€ Render acomptes table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private RenderFragment RenderTableAcomptes(List<AcompteDto> list, bool loading, bool isClient) => __builder =>
+    {
+        if (loading)
+        {
+            __builder.OpenElement(0,"div"); __builder.AddAttribute(1,"class","loading-state");
+            __builder.OpenElement(2,"div"); __builder.AddAttribute(3,"class","spinner-lg");
+            __builder.CloseElement(); __builder.CloseElement(); return;
+        }
+        if (!list.Any())
+        {
+            __builder.OpenElement(0,"div"); __builder.AddAttribute(1,"class","empty-state");
+            __builder.AddContent(2,$"Aucun acompte {(isClient?"client":"fournisseur")} enregistré.");
+            __builder.CloseElement(); return;
+        }
+        __builder.OpenElement(0,"div"); __builder.AddAttribute(1,"class","table-container");
+        __builder.OpenElement(2,"table"); __builder.AddAttribute(3,"class","data-table");
+        __builder.OpenElement(4,"thead"); __builder.OpenElement(5,"tr");
+        foreach (var h in new[]{"Date","Tiers","Mode","Montant","Utilisé","Disponible","Référence","Doc. lié","Statut",""})
+        {
+            __builder.OpenElement(6,"th"); __builder.AddContent(7,h); __builder.CloseElement();
+        }
+        __builder.CloseElement(); __builder.CloseElement();
+        __builder.OpenElement(8,"tbody");
+        foreach (var a in list)
+        {
+            var ac = a;
+            __builder.OpenElement(9,"tr"); __builder.AddAttribute(10,"ondblclick", EventCallback.Factory.Create(this, () => OuvrirConsultationAcompte(ac)));
+            __builder.OpenElement(10,"td"); __builder.AddAttribute(11,"class","small text-muted"); __builder.AddContent(12,ac.DateAcompte.ToString("dd/MM/yyyy")); __builder.CloseElement();
+            __builder.OpenElement(13,"td"); __builder.AddAttribute(14,"class","cell-main"); __builder.AddContent(15,ac.ClientNom??ac.FournisseurNom??"-"); __builder.CloseElement();
+            __builder.OpenElement(16,"td"); __builder.AddContent(17,LibellePropre(ac.ModeLibelle)); __builder.CloseElement();
+            __builder.OpenElement(18,"td"); __builder.AddAttribute(19,"class","text-right mono"); __builder.AddContent(20,ac.Montant.ToString("N2")+" F"); __builder.CloseElement();
+            __builder.OpenElement(21,"td"); __builder.AddAttribute(22,"class","text-right mono text-muted"); __builder.AddContent(23,ac.MontantUtilise.ToString("N2")+" F"); __builder.CloseElement();
+            __builder.OpenElement(24,"td"); __builder.AddAttribute(25,"class","text-right mono"+(ac.MontantDisponible>0?" text-success":"")); __builder.AddContent(26,ac.MontantDisponible.ToString("N2")+" F"); __builder.CloseElement();
+            __builder.OpenElement(27,"td"); __builder.AddAttribute(28,"class","small text-muted"); __builder.AddContent(29,ac.Reference); __builder.CloseElement();
+            __builder.OpenElement(30,"td"); __builder.OpenElement(31,"code"); __builder.AddContent(32,ac.NumeroDoc??"libre"); __builder.CloseElement(); __builder.CloseElement();
+            // Statut badge
+            __builder.OpenElement(33,"td");
+            var statusCls = ac.EstUtilise ? "badge-gray" : ac.MontantUtilise>0 ? "badge-amber" : "badge-green";
+            var statusLbl = ac.EstUtilise ? "Épuisé" : ac.MontantUtilise>0 ? "Partiel" : "Disponible";
+            __builder.OpenElement(34,"span"); __builder.AddAttribute(35,"class","badge "+statusCls); __builder.AddContent(36,statusLbl); __builder.CloseElement();
+            __builder.CloseElement();
+            // Actions
+            __builder.OpenElement(37,"td"); __builder.AddAttribute(38,"class","actions-cell"); __builder.OpenElement(39,"details"); __builder.AddAttribute(40,"class","row-actions-menu row-actions--mobile"); __builder.OpenElement(41,"summary"); __builder.AddAttribute(42,"class","btn-row-action btn-row-action--soft"); __builder.AddContent(43,"Actions"); __builder.CloseElement(); __builder.OpenElement(44,"div"); __builder.AddAttribute(45,"class","row-actions-menu-list"); __builder.OpenElement(46,"button"); __builder.AddAttribute(47,"class","btn-row-action btn-row-action--primary"); __builder.AddAttribute(48,"onclick", EventCallback.Factory.Create(this, () => OuvrirConsultationAcompte(ac))); __builder.AddContent(49,"Consulter"); __builder.CloseElement(); __builder.OpenElement(50,"button"); __builder.AddAttribute(51,"class","btn-row-action btn-row-action--print"); __builder.AddAttribute(52,"onclick", EventCallback.Factory.Create(this, () => ImprimerAcompteAsync(ac))); __builder.AddContent(53,"Reçu"); __builder.CloseElement(); if (!ac.EstUtilise && ac.MontantDisponible>0 && isClient) { __builder.OpenElement(54,"button"); __builder.AddAttribute(55,"class","btn-row-action btn-row-action--success"); __builder.AddAttribute(56,"title","Imputer sur une facture"); __builder.AddAttribute(57,"onclick", EventCallback.Factory.Create(this, () => OuvrirImputation(ac))); __builder.AddContent(58,"Imputer"); __builder.CloseElement(); } __builder.CloseElement(); __builder.CloseElement(); __builder.CloseElement();
+            __builder.CloseElement();
+        }
+        __builder.CloseElement(); __builder.CloseElement(); __builder.CloseElement();
+    };
+
+    private RenderFragment RenderTableReglements(List<ReglementDto> list, bool loading) => __builder =>
+    {
+        if (loading)
+        {
+            __builder.OpenElement(0, "div"); __builder.AddAttribute(1, "class", "loading-state");
+            __builder.OpenElement(2, "div"); __builder.AddAttribute(3, "class", "spinner-lg");
+            __builder.CloseElement(); __builder.CloseElement();
+            return;
+        }
+        if (!list.Any())
+        {
+            __builder.OpenElement(0, "div"); __builder.AddAttribute(1, "class", "empty-state");
+            __builder.AddContent(2, "Aucun règlement enregistré."); __builder.CloseElement();
+            return;
+        }
+        __builder.OpenElement(0, "div"); __builder.AddAttribute(1, "class", "table-container");
+        __builder.OpenElement(2, "table"); __builder.AddAttribute(3, "class", "data-table");
+        __builder.OpenElement(4, "thead"); __builder.OpenElement(5, "tr");
+        foreach (var h in new[]{"Date","Document","Tiers","Mode","Montant","Référence",""})
+        {
+            __builder.OpenElement(6, "th"); __builder.AddContent(7, h); __builder.CloseElement();
+        }
+        __builder.CloseElement(); __builder.CloseElement();
+        __builder.OpenElement(8, "tbody");
+        foreach (var r in list)
+        {
+            var reg = r;
+            __builder.OpenElement(9, "tr"); __builder.AddAttribute(10, "ondblclick", EventCallback.Factory.Create(this, () => OuvrirConsultationReglement(reg)));
+            __builder.OpenElement(10,"td"); __builder.AddAttribute(11,"class","small text-muted"); __builder.AddContent(12, reg.DateReglement.ToString("dd/MM/yyyy")); __builder.CloseElement();
+            __builder.OpenElement(13,"td"); __builder.OpenElement(14,"code"); __builder.AddAttribute(15,"class","mono small"); __builder.AddContent(16,reg.NumeroDoc??"-"); __builder.CloseElement(); __builder.CloseElement();
+            __builder.OpenElement(17,"td"); __builder.AddAttribute(18,"class","cell-main"); __builder.AddContent(19,reg.TiersNom??"-"); __builder.CloseElement();
+            __builder.OpenElement(20,"td"); __builder.AddContent(21,LibellePropre(reg.ModeLibelle)); __builder.CloseElement();
+            __builder.OpenElement(22,"td"); __builder.AddAttribute(23,"class","text-right mono"); __builder.AddContent(24,reg.Montant.ToString("N2")+" F"); __builder.CloseElement();
+            __builder.OpenElement(25,"td"); __builder.AddAttribute(26,"class","small text-muted"); __builder.AddContent(27,reg.Reference); __builder.CloseElement();
+            __builder.OpenElement(28,"td"); __builder.AddAttribute(29,"class","actions-cell"); __builder.OpenElement(30,"details"); __builder.AddAttribute(31,"class","row-actions-menu row-actions--mobile"); __builder.OpenElement(32,"summary"); __builder.AddAttribute(33,"class","btn-row-action btn-row-action--soft"); __builder.AddContent(34,"Actions"); __builder.CloseElement(); __builder.OpenElement(35,"div"); __builder.AddAttribute(36,"class","row-actions-menu-list"); __builder.OpenElement(37,"button"); __builder.AddAttribute(38,"class","btn-row-action btn-row-action--primary"); __builder.AddAttribute(39,"onclick", EventCallback.Factory.Create(this, () => OuvrirConsultationReglement(reg))); __builder.AddContent(40,"Consulter"); __builder.CloseElement(); __builder.OpenElement(41,"button"); __builder.AddAttribute(42,"class","btn-row-action btn-row-action--print"); __builder.AddAttribute(43,"onclick", EventCallback.Factory.Create(this, () => ImprimerReglementAsync(reg))); __builder.AddContent(44,"Reçu"); __builder.CloseElement(); __builder.OpenElement(45,"button"); __builder.AddAttribute(46,"class","btn-row-action btn-row-action--danger"); __builder.AddAttribute(47,"onclick", EventCallback.Factory.Create(this, () => SupprimerReglement(reg))); __builder.AddContent(48,"Supprimer"); __builder.CloseElement(); __builder.CloseElement(); __builder.CloseElement(); __builder.CloseElement();
+            __builder.CloseElement();
+        }
+        __builder.CloseElement(); __builder.CloseElement(); __builder.CloseElement();
+    };
+}
+
+
+
+
+
+
+
+

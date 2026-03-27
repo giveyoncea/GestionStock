@@ -1,0 +1,258 @@
+﻿@page "/"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+
+<PageTitle>Tableau de bord - GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Tableau de bord</h1>
+        <p class="page-subtitle">Repérez rapidement les points d'attention, les alertes de stock et les commandes à traiter.</p>
+    </div>
+    <span class="page-date">@DateTime.Now.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))</span>
+</div>
+
+@if (chargement)
+{
+    <div class="loading-state">
+        <div class="spinner-lg"></div>
+        <span>Chargement des données...</span>
+    </div>
+}
+else if (dashboard != null)
+{
+    <section class="dashboard-hero-card">
+        <div class="dashboard-hero-copy">
+            <span class="dashboard-hero-eyebrow">Pilotage quotidien</span>
+            <h2>@GetHeroTitle()</h2>
+            <p>@GetHeroText()</p>
+        </div>
+        <div class="dashboard-hero-actions">
+            <a href="/articles" class="btn-secondary">Voir les articles</a>
+            <a href="/mouvements" class="btn-secondary">Suivre les mouvements</a>
+            <a href="/commandes" class="btn-primary">Traiter les commandes</a>
+        </div>
+    </section>
+
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon kpi-blue">Art</div>
+            <div class="kpi-body">
+                <div class="kpi-value">@dashboard.TotalArticles</div>
+                <div class="kpi-label">Articles référencés</div>
+            </div>
+        </div>
+        <div class="kpi-card @kpiWarnCls">
+            <div class="kpi-icon kpi-amber">Alerte</div>
+            <div class="kpi-body">
+                <div class="kpi-value">@dashboard.ArticlesEnAlerte</div>
+                <div class="kpi-label">En alerte de stock</div>
+            </div>
+        </div>
+        <div class="kpi-card @kpiDangerCls">
+            <div class="kpi-icon kpi-red">Rupt</div>
+            <div class="kpi-body">
+                <div class="kpi-value">@dashboard.ArticlesEnRupture</div>
+                <div class="kpi-label">En rupture de stock</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon kpi-teal">Cmd</div>
+            <div class="kpi-body">
+                <div class="kpi-value">@dashboard.CommandesEnAttente</div>
+                <div class="kpi-label">Commandes en attente</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon kpi-green">@Devise.Symbol</div>
+            <div class="kpi-body">
+                <div class="kpi-value">@Montant(dashboard.ValeurTotaleStock)</div>
+                <div class="kpi-label">Valeur totale du stock</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Alertes de stock</h2>
+                <a href="/articles" class="panel-link">Voir tout</a>
+            </div>
+            @if (!dashboard.DernieresAlertes.Any())
+            {
+                <div class="empty-state-sm">Aucune alerte en cours</div>
+            }
+            else
+            {
+                <table class="data-table data-table-sm">
+                    <thead>
+                        <tr><th>Article</th><th>Code</th><th class="text-right">Stock</th><th>Seuil</th><th>État</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var alerte in dashboard.DernieresAlertes)
+                        {
+                            var alertRowCls = alerte.TypeAlerte == "RUPTURE" ? "alert-row-danger" : "alert-row-warn";
+                            <tr class="@alertRowCls">
+                                <td>@alerte.ArticleDesignation</td>
+                                <td><code>@alerte.ArticleCode</code></td>
+                                <td class="text-right">@alerte.QuantiteActuelle</td>
+                                <td class="text-right">@alerte.SeuilAlerte</td>
+                                <td><span class="badge @(GetAlerteCls(alerte.TypeAlerte))">@alerte.TypeAlerte</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Derniers mouvements</h2>
+                <a href="/mouvements" class="panel-link">Voir tout</a>
+            </div>
+            @if (!dashboard.DerniersMouvements.Any())
+            {
+                <div class="empty-state-sm">Aucun mouvement récent</div>
+            }
+            else
+            {
+                <table class="data-table data-table-sm">
+                    <thead>
+                        <tr><th>Article</th><th>Type</th><th class="text-right">Qté</th><th>Date</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in dashboard.DerniersMouvements)
+                        {
+                            var signe = m.TypeMouvement == 2 ? "-" : "+";
+                            var qtyCls = m.TypeMouvement == 2 ? "qty-neg" : "qty-pos";
+                            <tr>
+                                <td>@m.ArticleDesignation</td>
+                                <td><span class="mvt-badge @(GetMvtClass(m.TypeMouvement))">@(GetMvtIcon(m.TypeMouvement))</span></td>
+                                <td class="text-right @qtyCls">@signe@m.Quantite</td>
+                                <td class="text-muted small">@m.DateMouvement.ToString("dd/MM HH:mm")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="panel panel-wide">
+            <div class="panel-header">
+                <h2 class="panel-title">Commandes urgentes</h2>
+                <a href="/commandes" class="panel-link">Voir tout</a>
+            </div>
+            @if (!dashboard.CommandesUrgentes.Any())
+            {
+                <div class="empty-state-sm">Aucune commande en retard</div>
+            }
+            else
+            {
+                <table class="data-table data-table-sm">
+                    <thead>
+                        <tr><th>N°</th><th>Fournisseur</th><th>Livraison prévue</th><th>Statut</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var cmd in dashboard.CommandesUrgentes)
+                        {
+                            var enRetard = cmd.DateLivraisonPrevue < DateTime.Now;
+                            var dateCls = enRetard ? "text-danger" : "";
+                            <tr>
+                                <td><code>@cmd.Numero</code></td>
+                                <td>@cmd.FournisseurNom</td>
+                                <td class="@dateCls">@cmd.DateLivraisonPrevue.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge @(GetStatutClass(cmd.Statut))">@cmd.StatutLibelle</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardDto? dashboard;
+    private bool chargement = true;
+    private string kpiWarnCls = "";
+    private string kpiDangerCls = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        dashboard = await Api.GetDashboardAsync();
+        chargement = false;
+        if (dashboard != null)
+        {
+            kpiWarnCls = dashboard.ArticlesEnAlerte > 0 ? "kpi-warn" : "";
+            kpiDangerCls = dashboard.ArticlesEnRupture > 0 ? "kpi-danger" : "";
+        }
+    }
+
+    private string GetMvtClass(int type) => type switch
+    {
+        1 => "mvt-entree",
+        2 => "mvt-sortie",
+        3 => "mvt-transfert",
+        4 => "mvt-ajustement",
+        _ => ""
+    };
+
+    private string GetMvtIcon(int type) => type switch
+    {
+        1 => "↓",
+        2 => "↑",
+        3 => "⇄",
+        4 => "≈",
+        _ => "."
+    };
+
+    private string GetStatutClass(int statut) => statut switch
+    {
+        3 => "badge-blue",
+        4 => "badge-amber",
+        5 => "badge-green",
+        7 => "badge-red",
+        _ => "badge-gray"
+    };
+
+    private string GetAlerteCls(string type) =>
+        type == "RUPTURE" ? "badge-red" : "badge-amber";
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+
+    private string GetHeroTitle()
+    {
+        if (dashboard is null)
+            return "PrÃ©paration des indicateurs en cours";
+
+        if (dashboard.ArticlesEnRupture > 0)
+            return "Des ruptures demandent une action rapide";
+
+        if (dashboard.ArticlesEnAlerte > 0)
+            return "Quelques seuils de stock mÃ©ritent une vigilance particuliÃ¨re";
+
+        if (dashboard.CommandesEnAttente > 0)
+            return "Les commandes en attente constituent la prochaine prioritÃ©";
+
+        return "L'activitÃ© est globalement sous contrÃ´le";
+    }
+
+    private string GetHeroText()
+    {
+        if (dashboard is null)
+            return "Les principaux indicateurs et raccourcis seront disponibles dans un instant.";
+
+        if (dashboard.ArticlesEnRupture > 0)
+            return "Commencez par les articles en rupture, puis vÃ©rifiez les commandes urgentes pour Ã©viter les blocages opÃ©rationnels.";
+
+        if (dashboard.ArticlesEnAlerte > 0)
+            return "Les alertes restent gÃ©rables. Une revue rapide des mouvements et des seuils peut Ã©viter des ruptures Ã  court terme.";
+
+        if (dashboard.CommandesEnAttente > 0)
+            return "Les approvisionnements semblent corrects, mais plusieurs commandes attendent encore une action ou un suivi.";
+
+        return "Aucune alerte majeure pour le moment. Utilisez ce tableau de bord comme point d'entrÃ©e pour piloter la journÃ©e.";
+    }
+}

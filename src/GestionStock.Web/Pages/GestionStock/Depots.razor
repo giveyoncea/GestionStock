@@ -1,0 +1,253 @@
+@page "/depots"
+@attribute [Authorize]
+@inject IApiService Api
+
+<PageTitle>Depots</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Dépôts de stockage</h1>
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <button class="btn-primary" @onclick="() => OuvrirModal(null)">+ Nouveau dépôt</button>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="depots-grid">
+        @foreach (var d in depots)
+        {
+            <div class="@(GetCardCls(d))">
+                <div class="depot-card-header">
+                    <code class="depot-code">@d.Code</code>
+                    @if (d.EstPrincipal)
+                    {
+                        <span class="badge badge-amber">Principal</span>
+                    }
+                    @if (!d.EstActif)
+                    {
+                        <span class="badge badge-gray">Inactif</span>
+                    }
+                </div>
+                <div class="depot-card-body">
+                    <h3 class="depot-name">@d.Libelle</h3>
+                    @if (!string.IsNullOrEmpty(d.Description))
+                    {
+                        <p class="depot-desc">@d.Description</p>
+                    }
+                    @if (!string.IsNullOrEmpty(d.Ville))
+                    {
+                        <div class="depot-info-item">@d.Ville @d.CodePostal</div>
+                    }
+                    @if (!string.IsNullOrEmpty(d.Responsable))
+                    {
+                        <div class="depot-info-item">@d.Responsable</div>
+                    }
+                    @if (d.SurfaceM2 > 0)
+                    {
+                        <div class="depot-info-item">@d.SurfaceM2.ToString("N0") m²</div>
+                    }
+                </div>
+                <div class="depot-card-footer">
+                    <AuthorizeView Roles="Admin">
+                        <Authorized>
+                            @if (!d.EstPrincipal && d.EstActif)
+                            {
+                                <button class="btn-action btn-action-amber" @onclick="() => DefinirPrincipal(d.Id)">Principal</button>
+                            }
+                            <button class="btn-action btn-action-blue" @onclick="() => OuvrirModal(d)">Modifier</button>
+                            @if (d.EstActif)
+                            {
+                                <button class="btn-action btn-action-red" @onclick="() => Desactiver(d.Id)">Désactiver</button>
+                            }
+                        </Authorized>
+                    </AuthorizeView>
+                </div>
+            </div>
+        }
+    </div>
+    @if (!depots.Any())
+    {
+        <div class="empty-state">Aucun dépôt. Créez-en un.</div>
+    }
+}
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="() => showModal = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@modalTitre</h2>
+                <button class="btn-close" @onclick="() => showModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Code *</label>
+                        <input class="field-input" @bind="fCode" placeholder="DEP-01" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Libellé *</label>
+                        <input class="field-input" @bind="fLibelle" />
+                    </div>
+                    <div class="field-group col-span-3">
+                        <label class="field-label">Description</label>
+                        <input class="field-input" @bind="fDescription" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Type</label>
+                        <select class="field-input" @bind="fTypeDepot">
+                            <option value="0">Standard</option>
+                            <option value="1">Principal</option>
+                            <option value="2">Transit</option>
+                            <option value="3">Externe</option>
+                            <option value="4">Quarantaine</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Responsable</label>
+                        <input class="field-input" @bind="fResponsable" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Téléphone</label>
+                        <input class="field-input" @bind="fTelephone" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Adresse</label>
+                        <input class="field-input" @bind="fAdresse" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Code postal</label>
+                        <input class="field-input" @bind="fCodePostal" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="fVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Pays</label>
+                        <input class="field-input" @bind="fPays" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Surface m²</label>
+                        <input class="field-input" type="number" @bind="fSurface" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Capacité palettes</label>
+                        <input class="field-input" type="number" @bind="fCapacite" />
+                    </div>
+                    <div class="field-group col-span-2 field-checks">
+                        <label class="check-label">
+                            <input type="checkbox" @bind="fEstPrincipal" /> Dépôt principal
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showModal = false">Annuler</button>
+                <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">@savingLabel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DepotDto> depots = new();
+    private bool chargement = true, showModal = false, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+    private string savingLabel = "Enregistrer";
+    private string modalTitre = "Nouveau dépôt";
+    private Guid? editId;
+
+    private string fCode = "", fLibelle = "", fDescription = "";
+    private string fAdresse = "", fCodePostal = "", fVille = "", fPays = "France";
+    private string fResponsable = "", fTelephone = "";
+    private decimal fSurface = 0;
+    private int fCapacite = 0, fTypeDepot = 0;
+    private bool fEstPrincipal = false;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        chargement = true;
+        depots = await Api.GetDepotsAsync(false) ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirModal(DepotDto? d)
+    {
+        editId = d?.Id;
+        modalTitre = d == null ? "Nouveau dépôt" : "Modifier le dépôt";
+        fCode = d?.Code ?? "";
+        fLibelle = d?.Libelle ?? "";
+        fDescription = d?.Description ?? "";
+        fAdresse = d?.Adresse ?? "";
+        fCodePostal = d?.CodePostal ?? "";
+        fVille = d?.Ville ?? "";
+        fPays = d?.Pays ?? "France";
+        fResponsable = d?.Responsable ?? "";
+        fTelephone = d?.Telephone ?? "";
+        fSurface = d?.SurfaceM2 ?? 0;
+        fCapacite = d?.CapacitePalettes ?? 0;
+        fTypeDepot = d?.TypeDepot ?? 0;
+        fEstPrincipal = d?.EstPrincipal ?? false;
+        showModal = true;
+        message = null;
+    }
+
+    private async Task Sauvegarder()
+    {
+        saving = true;
+        savingLabel = "Enregistrement...";
+        var dto = new DepotRequest
+        {
+            Code = fCode, Libelle = fLibelle, Description = fDescription,
+            Adresse = fAdresse, CodePostal = fCodePostal, Ville = fVille, Pays = fPays,
+            Responsable = fResponsable, Telephone = fTelephone,
+            SurfaceM2 = fSurface, CapacitePalettes = fCapacite,
+            TypeDepot = fTypeDepot, EstPrincipal = fEstPrincipal
+        };
+        var r = editId.HasValue
+            ? await Api.ModifierDepotAsync(editId.Value, dto)
+            : await Api.CreerDepotAsync(dto);
+        saving = false;
+        savingLabel = "Enregistrer";
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showModal = false; await Load(); }
+    }
+
+    private async Task DefinirPrincipal(Guid id)
+    {
+        var r = await Api.DefinirDepotPrincipalAsync(id);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) await Load();
+    }
+
+    private async Task Desactiver(Guid id)
+    {
+        var r = await Api.DesactiverDepotAsync(id);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) await Load();
+    }
+
+    private string GetCardCls(DepotDto d)
+    {
+        if (d.EstPrincipal) return "depot-card depot-card--principal";
+        return "depot-card";
+    }
+}

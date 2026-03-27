@@ -1,0 +1,466 @@
+﻿@page "/tracabilite"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+
+<PageTitle>TraÃ§abilitÃ© â€“ GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">TraÃ§abilitÃ©</h1>
+        <p class="page-date">Lots Â· PÃ©remptions Â· Historique</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-secondary @(activeTab == "alertes" ? "btn-active" : "")"
+                @onclick="SetTabAlertes">âš  Alertes pÃ©remption</button>
+        <button class="btn-secondary @(activeTab == "lots" ? "btn-active" : "")"
+                @onclick="SetTabLots">ðŸ“¦ Lots</button>
+        <button class="btn-primary" @onclick="OuvrirCreationLot">+ Nouveau lot</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@* â”€â”€â”€ ONGLET ALERTES PÃ‰REMPTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (activeTab == "alertes")
+{
+    <div class="toolbar">
+        <div class="toolbar-filters">
+            <label class="field-label" style="margin:0">Horizon :</label>
+            <select class="field-input" @bind="joursAvance" @bind:after="ChargerAlertes">
+                <option value="7">7 jours</option>
+                <option value="15">15 jours</option>
+                <option value="30">30 jours</option>
+                <option value="60">60 jours</option>
+                <option value="90">90 jours</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@alertes.Count alerte(s)</span>
+        </div>
+    </div>
+
+    @if (chargement) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+    else
+    {
+        @if (!alertes.Any())
+        {
+            <div class="empty-state">âœ“ Aucune alerte de pÃ©remption sur les @joursAvance prochains jours.</div>
+        }
+        else
+        {
+            <div class="table-container">
+                <table class="data-table">
+                    <thead><tr>
+                        <th>Article</th><th>NÂ° Lot</th><th>Date pÃ©remption</th>
+                        <th class="text-right">QtÃ© restante</th><th>Jours restants</th><th>Statut</th>
+                    </tr></thead>
+                    <tbody>
+                    @foreach (var a in alertes)
+                    {
+                        <tr class="@(a.Critique ? "row-danger" : "row-warn")">
+                            <td>
+                                <div class="cell-main">@a.ArticleDesignation</div>
+                                <div class="cell-sub"><code>@a.ArticleCode</code></div>
+                            </td>
+                            <td><code>@a.NumeroLot</code></td>
+                            <td>@a.DatePeremption.ToString("dd/MM/yyyy")</td>
+                            <td class="text-right mono">@a.QuantiteRestante</td>
+                            <td>
+                                <span class="badge @(a.Critique ? "badge-red" : "badge-amber")">
+                                    @(a.JoursRestants <= 0 ? "PÃ‰RIMÃ‰" : $"J-{a.JoursRestants}")
+                                </span>
+                            </td>
+                            <td><span class="badge badge-amber">@GetStatutLot(a.Statut)</span></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+}
+
+@* â”€â”€â”€ ONGLET LOTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (activeTab == "lots")
+{
+    <div class="toolbar">
+        <div class="search-box">
+            <span class="search-icon">ðŸ”</span>
+            <input class="search-input" type="text" placeholder="Article, NÂ° lotâ€¦"
+                   @bind="rechercheLot" @bind:event="oninput" />
+        </div>
+        <div class="toolbar-filters">
+            <select class="field-input" @bind="filtreStatutLot" @bind:after="ChargerLots">
+                <option value="">Tous les statuts</option>
+                <option value="1">Disponible</option>
+                <option value="2">Quarantaine</option>
+                <option value="3">Ã‰puisÃ©</option>
+                <option value="4">PÃ©rimÃ©</option>
+                <option value="5">BloquÃ©</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <span class="record-count">@LotsFiltres.Count() lot(s)</span>
+        </div>
+    </div>
+
+    @if (chargement) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+    else
+    {
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Article</th><th>NÂ° Lot</th><th>RÃ©ception</th>
+                    <th>PÃ©remption</th><th class="text-right">Init.</th>
+                    <th class="text-right">Restant</th><th>Statut</th><th></th>
+                </tr></thead>
+                <tbody>
+                @foreach (var lot in LotsFiltres)
+                {
+                    var rowCls = lot.EstPerime ? "row-danger" : lot.EnAlertePeremption ? "row-warn" : "";
+                    <tr class="@rowCls">
+                        <td>
+                            <div class="cell-main">@lot.ArticleDesignation</div>
+                            <div class="cell-sub"><code>@lot.ArticleCode</code></div>
+                        </td>
+                        <td>
+                            <code>@lot.NumeroLot</code>
+                            @if (!string.IsNullOrEmpty(lot.NumeroSerie))
+                            { <div class="cell-sub text-muted">S/N: @lot.NumeroSerie</div> }
+                        </td>
+                        <td class="text-muted small">@lot.DateReception.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            @if (lot.DatePeremption.HasValue)
+                            {
+                                <span class="@(lot.EstPerime ? "text-danger" : lot.EnAlertePeremption ? "text-warn" : "")">
+                                    @lot.DatePeremption.Value.ToString("dd/MM/yyyy")
+                                </span>
+                            }
+                            else { <span class="text-muted">â€”</span> }
+                        </td>
+                        <td class="text-right mono">@lot.QuantiteInitiale</td>
+                        <td class="text-right mono @(lot.QuantiteRestante == 0 ? "text-muted" : "")">@lot.QuantiteRestante</td>
+                        <td><span class="badge @GetStatutLotCls(lot.Statut)">@lot.StatutLibelle</span></td>
+                        <td class="actions-cell">
+                            <div class="row-actions">
+                                <button class="btn-row-action btn-row-action--soft" title="Mouvements" @onclick="() => OuvrirMouvementsLot(lot)">Mouvements</button>
+                                <button class="btn-row-action btn-row-action--warn" title="Changer le statut" @onclick="() => OuvrirStatutLot(lot)">Statut</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (!lots.Any()) { <div class="empty-state">Aucun lot enregistrÃ©.</div> }
+    }
+}
+
+@* â”€â”€â”€ MODAL NOUVEAU LOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showCreerLot)
+{
+    <div class="modal-overlay" @onclick="() => showCreerLot = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>ðŸ“¦ Nouveau lot</h2>
+                <button class="btn-close" @onclick="() => showCreerLot = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Article *</label>
+                        <select class="field-input" @bind="lotArticleId">
+                            <option value="">â€” SÃ©lectionner â€”</option>
+                            @foreach (var art in articlesGestionLot)
+                            {
+                                <option value="@art.Id">[@art.Code] @art.Designation</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">NÂ° Lot *</label>
+                        <input class="field-input" @bind="lotNumero" placeholder="LOT-2024-001" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">QuantitÃ© *</label>
+                        <input class="field-input" type="number" min="1" @bind="lotQuantite" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date rÃ©ception *</label>
+                        <input class="field-input" type="date" @bind="lotDateReception" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date fabrication</label>
+                        <input class="field-input" type="date" @bind="lotDateFabrication" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Date pÃ©remption (DLUO/DLC)</label>
+                        <input class="field-input" type="date" @bind="lotDatePeremption" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">NÂ° SÃ©rie</label>
+                        <input class="field-input" @bind="lotNumeroSerie" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Certificat qualitÃ©</label>
+                        <input class="field-input" @bind="lotCertificat" placeholder="RÃ©f. certificat fournisseur" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreerLot = false">Annuler</button>
+                <button class="btn-primary" @onclick="EnregistrerLot" disabled="@saving">
+                    @(saving ? "Enregistrementâ€¦" : "CrÃ©er le lot")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* â”€â”€â”€ MODAL MOUVEMENTS D'UN LOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showMouvementsLot && lotSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="() => showMouvementsLot = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>ðŸ“‹ Mouvements â€” Lot @lotSelectionne.NumeroLot</h2>
+                <button class="btn-close" @onclick="() => showMouvementsLot = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                <div class="lot-detail-header">
+                    <div><span class="detail-lbl">Article</span> <strong>@lotSelectionne.ArticleDesignation</strong> <code>@lotSelectionne.ArticleCode</code></div>
+                    <div><span class="detail-lbl">RÃ©ception</span> @lotSelectionne.DateReception.ToString("dd/MM/yyyy")</div>
+                    @if (lotSelectionne.DatePeremption.HasValue)
+                    {
+                        <div><span class="detail-lbl">PÃ©remption</span>
+                            <span class="@(lotSelectionne.EstPerime ? "text-danger" : "")">
+                                @lotSelectionne.DatePeremption.Value.ToString("dd/MM/yyyy")
+                            </span>
+                        </div>
+                    }
+                    <div><span class="detail-lbl">QtÃ©</span> @lotSelectionne.QuantiteRestante / @lotSelectionne.QuantiteInitiale</div>
+                </div>
+                @if (chargementMvt)
+                {
+                    <div class="loading-state"><div class="spinner-lg"></div></div>
+                }
+                else if (!mouvementsLot.Any())
+                {
+                    <div class="empty-state">Aucun mouvement enregistrÃ© pour ce lot.</div>
+                }
+                else
+                {
+                    <div class="table-container" style="max-height:380px;overflow-y:auto">
+                        <table class="data-table">
+                            <thead><tr>
+                                <th>Date</th><th>Type</th><th class="text-right">QtÃ©</th>
+                                <th class="text-right">Valeur</th><th>Emplacement</th>
+                                <th>RÃ©fÃ©rence</th><th>OpÃ©rateur</th>
+                            </tr></thead>
+                            <tbody>
+                            @foreach (var m in mouvementsLot)
+                            {
+                                <tr>
+                                    <td class="small text-muted">@m.DateMouvement.ToString("dd/MM HH:mm")</td>
+                                    <td><span class="badge @GetMvtCls(m.TypeMouvement)">@m.TypeLibelle</span></td>
+                                    <td class="text-right mono @(m.TypeMouvement == 2 ? "text-danger" : "text-success")">
+                                        @(m.TypeMouvement == 2 ? "-" : "+")@m.Quantite
+                                    </td>
+                                    <td class="text-right mono small">@Montant(m.ValeurTotale)</td>
+                                    <td class="small text-muted">
+                                        @m.EmplacementSource
+                                        @if (!string.IsNullOrEmpty(m.EmplacementDestination))
+                                        { <span>â†’ @m.EmplacementDestination</span> }
+                                    </td>
+                                    <td class="small text-muted">@(m.Reference ?? m.Motif)</td>
+                                    <td class="small text-muted">@m.CreatedBy</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showMouvementsLot = false">Fermer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* â”€â”€â”€ MODAL STATUT LOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showStatutLot && lotSelectionne != null)
+{
+    <div class="modal-overlay" @onclick="() => showStatutLot = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Changer le statut â€” @lotSelectionne.NumeroLot</h2>
+                <button class="btn-close" @onclick="() => showStatutLot = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                <div class="statut-choices">
+                    @foreach (var (val, lib, cls) in new[] {
+                        (1, "Disponible", "badge-green"), (2, "Quarantaine", "badge-amber"),
+                        (3, "Ã‰puisÃ©", "badge-gray"), (4, "PÃ©rimÃ©", "badge-red"), (5, "BloquÃ©", "badge-red") })
+                    {
+                        <button class="statut-choice @(nouveauStatut == val ? "statut-choice--active" : "")"
+                                @onclick="() => nouveauStatut = val">
+                            <span class="badge @cls">@lib</span>
+                        </button>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showStatutLot = false">Annuler</button>
+                <button class="btn-primary" @onclick="AppliquerStatut" disabled="@saving">Appliquer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string activeTab = "alertes";
+    private bool chargement = true, chargementMvt = false, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    // Alertes
+    private List<AlertePeremptionDto> alertes = new();
+    private int joursAvance = 30;
+
+    // Lots
+    private List<LotTracabiliteDto> lots = new();
+    private string rechercheLot = "";
+    private string filtreStatutLot = "";
+    private IEnumerable<LotTracabiliteDto> LotsFiltres =>
+        string.IsNullOrWhiteSpace(rechercheLot) ? lots
+        : lots.Where(l => l.NumeroLot.Contains(rechercheLot, StringComparison.OrdinalIgnoreCase) ||
+                          l.ArticleCode.Contains(rechercheLot, StringComparison.OrdinalIgnoreCase) ||
+                          l.ArticleDesignation.Contains(rechercheLot, StringComparison.OrdinalIgnoreCase));
+
+    // CrÃ©ation lot
+    private bool showCreerLot = false;
+    private List<ArticleDto> articlesGestionLot = new();
+    private string lotArticleId = "";
+    private string lotNumero = "", lotNumeroSerie = "", lotCertificat = "";
+    private DateTime lotDateReception = DateTime.Today;
+    private DateTime? lotDateFabrication, lotDatePeremption;
+    private int lotQuantite = 1;
+
+    // DÃ©tail lot
+    private LotTracabiliteDto? lotSelectionne;
+    private bool showMouvementsLot = false;
+    private bool showStatutLot = false;
+    private List<MouvementTracabiliteDto> mouvementsLot = new();
+    private int nouveauStatut = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await ChargerAlertes();
+        var arts = await Api.GetArticlesAsync(1, 200, null, null);
+        articlesGestionLot = arts?.Items.ToList() ?? new();
+    }
+
+    private async Task SetTabAlertes() => await SetTab("alertes");
+    private async Task SetTabLots() => await SetTab("lots");
+
+    private async Task SetTab(string tab)
+    {
+        activeTab = tab;
+        if (tab == "alertes") await ChargerAlertes();
+        else await ChargerLots();
+    }
+
+    private async Task ChargerAlertes()
+    {
+        chargement = true;
+        alertes = await Api.GetAlertesPeremptionAsync(joursAvance) ?? new();
+        chargement = false;
+    }
+
+    private async Task ChargerLots()
+    {
+        chargement = true;
+        lots = await Api.GetLotsAsync() ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirCreationLot()
+    {
+        lotArticleId = ""; lotNumero = ""; lotNumeroSerie = ""; lotCertificat = "";
+        lotDateReception = DateTime.Today; lotDateFabrication = null; lotDatePeremption = null;
+        lotQuantite = 1;
+        showCreerLot = true;
+    }
+
+    private async Task EnregistrerLot()
+    {
+        if (!Guid.TryParse(lotArticleId, out var aid) || string.IsNullOrWhiteSpace(lotNumero) || lotQuantite <= 0)
+        {
+            message = "Article, NÂ° lot et quantitÃ© obligatoires.";
+            msgCls = "alert-error";
+            return;
+        }
+        saving = true;
+        var r = await Api.CreerLotAsync(new LotRequest
+        {
+            ArticleId = aid, NumeroLot = lotNumero, Quantite = lotQuantite,
+            DateReception = lotDateReception,
+            DateFabrication = lotDateFabrication,
+            DatePeremption = lotDatePeremption,
+            NumeroSerie = string.IsNullOrWhiteSpace(lotNumeroSerie) ? null : lotNumeroSerie,
+            CertifiqueQualite = string.IsNullOrWhiteSpace(lotCertificat) ? null : lotCertificat
+        });
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showCreerLot = false; await ChargerLots(); activeTab = "lots"; }
+    }
+
+    private async Task OuvrirMouvementsLot(LotTracabiliteDto lot)
+    {
+        lotSelectionne = lot;
+        showMouvementsLot = true;
+        chargementMvt = true;
+        mouvementsLot = await Api.GetMouvementsLotAsync(lot.Id) ?? new();
+        chargementMvt = false;
+    }
+
+    private void OuvrirStatutLot(LotTracabiliteDto lot)
+    {
+        lotSelectionne = lot;
+        nouveauStatut = lot.Statut;
+        showStatutLot = true;
+    }
+
+    private async Task AppliquerStatut()
+    {
+        if (lotSelectionne == null) return;
+        saving = true;
+        var r = await Api.ModifierStatutLotAsync(lotSelectionne.Id, nouveauStatut);
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showStatutLot = false; await ChargerLots(); }
+    }
+
+    private string GetStatutLot(int s) => s switch {
+        1 => "Disponible", 2 => "Quarantaine", 3 => "Ã‰puisÃ©",
+        4 => "PÃ©rimÃ©", 5 => "BloquÃ©", _ => "?" };
+
+    private string GetStatutLotCls(int s) => s switch {
+        1 => "badge-green", 2 => "badge-amber", 3 => "badge-gray",
+        4 or 5 => "badge-red", _ => "badge-gray" };
+
+    private string GetMvtCls(int t) => t switch {
+        1 => "badge-green", 2 => "badge-red", 3 => "badge-blue",
+        4 => "badge-amber", _ => "badge-gray" };
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}
+

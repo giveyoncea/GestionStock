@@ -1,0 +1,421 @@
+﻿@page "/offline"
+@inject ILocalDbService LocalDb
+@inject IOfflineSyncService OfflineSync
+@inject IOfflineSyncStateService OfflineState
+@inject IOfflineWorkspaceService OfflineWorkspace
+@inject Blazored.LocalStorage.ILocalStorageService Storage
+
+<PageTitle>Mode hors ligne</PageTitle>
+
+<div class="page-header offline-page-header">
+    <div>
+        <h1 class="page-title">Mode hors ligne</h1>
+        <p class="page-subtitle">Préparez le travail local, synchronisez au bon moment et traitez les blocages sans quitter l'application.</p>
+    </div>
+    <div class="page-actions offline-page-actions">
+        <button class="btn btn-secondary" @onclick="InitializeOfflineAsync" disabled="@busy">Préparer le local</button>
+        <button class="btn btn-secondary" @onclick="ReloadWorkspaceAsync" disabled="@busy">Actualiser l'état</button>
+        <button class="btn btn-primary" @onclick="LoadBootstrapAsync" disabled="@busy">Récupérer les référentiels</button>
+        <button class="btn btn-primary" @onclick="SyncQueueAsync" disabled="@(busy || queuePreview.Count == 0)">Lancer la synchronisation</button>
+        <button class="btn btn-outline" @onclick="ClearConflictsAsync" disabled="@(busy || conflicts.Count == 0)">Nettoyer les conflits</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="@(messageIsError ? "alert-error" : "alert-success")">@message</div>
+}
+
+<section class="offline-focus-card">
+    <div class="offline-focus-copy">
+        <span class="offline-focus-eyebrow">Prochaine étape recommandée</span>
+        <h2>@GetFocusTitle()</h2>
+        <p>@GetFocusText()</p>
+    </div>
+    <div class="offline-focus-metrics">
+        <span class="offline-focus-pill">@queuePreview.Count opération(s) en attente</span>
+        <span class="offline-focus-pill offline-focus-pill--warn">@conflicts.Count conflit(s)</span>
+    </div>
+</section>
+
+<div class="offline-overview-grid">
+    <section class="settings-card offline-card">
+        <div class="settings-card-header">
+            <h2>Poste local</h2>
+        </div>
+        <div class="settings-card-body offline-stack">
+            <div class="offline-kpi-row">
+                <span class="offline-kpi-label">Moteur local</span>
+                <strong class="offline-kpi-value">@localProvider</strong>
+            </div>
+            <div class="offline-kpi-row">
+                <span class="offline-kpi-label">Base locale</span>
+                <code class="offline-inline-code">@databaseName</code>
+            </div>
+            <div class="offline-kpi-row">
+                <span class="offline-kpi-label">Disponibilité</span>
+                <span class="offline-badge @(localSupported ? "offline-badge-success" : "offline-badge-muted")">@(localSupported ? "Disponible" : "En attente")</span>
+            </div>
+            <div class="offline-kpi-row">
+                <span class="offline-kpi-label">Scripts de schéma</span>
+                <strong class="offline-kpi-value">@schemaScriptCount</strong>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(localMessage))
+            {
+                <p class="offline-help">@localMessage</p>
+            }
+        </div>
+    </section>
+
+    <section class="settings-card offline-card">
+        <div class="settings-card-header">
+            <h2>Référentiels serveur</h2>
+        </div>
+        <div class="settings-card-body offline-stack">
+            <div class="offline-kpi-row">
+                <span class="offline-kpi-label">Dernière récupération</span>
+                <strong class="offline-kpi-value">@(lastBootstrapUtc?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Jamais")</strong>
+            </div>
+            <div class="offline-bootstrap-grid">
+                <div class="offline-mini-card">
+                    <span>Articles</span>
+                    <strong>@articleCount</strong>
+                </div>
+                <div class="offline-mini-card">
+                    <span>Dépôts</span>
+                    <strong>@depotCount</strong>
+                </div>
+                <div class="offline-mini-card">
+                    <span>Clients</span>
+                    <strong>@clientCount</strong>
+                </div>
+                <div class="offline-mini-card">
+                    <span>Fournisseurs</span>
+                    <strong>@fournisseurCount</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="settings-card offline-card">
+        <div class="settings-card-header">
+            <h2>Résumé de synchronisation</h2>
+        </div>
+        <div class="settings-card-body offline-stack">
+            <div class="offline-bootstrap-grid">
+                <div class="offline-mini-card offline-mini-card-success">
+                    <span>Appliquées</span>
+                    <strong>@summary.AppliedCount</strong>
+                </div>
+                <div class="offline-mini-card offline-mini-card-warning">
+                    <span>Conflits</span>
+                    <strong>@summary.ConflictCount</strong>
+                </div>
+                <div class="offline-mini-card offline-mini-card-danger">
+                    <span>Rejets</span>
+                    <strong>@summary.RejectedCount</strong>
+                </div>
+                <div class="offline-mini-card">
+                    <span>En attente</span>
+                    <strong>@summary.PendingCount</strong>
+                </div>
+            </div>
+            <p class="offline-help">Ce résumé vous aide à voir immédiatement ce qui est passé, bloqué ou encore en attente de traitement.</p>
+        </div>
+    </section>
+</div>
+
+<div class="offline-details-grid">
+    <section class="settings-card offline-card">
+        <div class="settings-card-header">
+            <h2>Opérations à synchroniser</h2>
+        </div>
+        <div class="settings-card-body">
+            @if (queuePreview.Count == 0)
+            {
+                <div class="offline-empty">Aucune opération en attente pour l'instant. Vous pouvez travailler normalement ou préparer le poste local.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="data-table offline-table">
+                        <thead>
+                            <tr>
+                                <th>Entité</th>
+                                <th>Action</th>
+                                <th>Statut</th>
+                                <th>Erreur</th>
+                                <th>Dernière tentative</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var item in queuePreview.OrderByDescending(x => x.CreatedAtUtc))
+                        {
+                            <tr>
+                                <td>@item.EntityType</td>
+                                <td>@item.OperationType</td>
+                                <td>
+                                    <span class="offline-badge @GetStatusBadgeClass(item.Status)">@item.Status</span>
+                                </td>
+                                <td>@(string.IsNullOrWhiteSpace(item.LastError) ? "-" : item.LastError)</td>
+                                <td>@(item.LastAttemptUtc?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "-")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="settings-card offline-card">
+        <div class="settings-card-header">
+            <h2>Conflits à traiter</h2>
+        </div>
+        <div class="settings-card-body">
+            @if (conflicts.Count == 0)
+            {
+                <div class="offline-empty">Aucun conflit détecté. Les prochaines synchronisations devraient être fluides.</div>
+            }
+            else
+            {
+                <div class="offline-conflict-list">
+                    @foreach (var conflict in conflicts.OrderByDescending(x => x.CreatedAtUtc))
+                    {
+                        <article class="offline-conflict-card">
+                            <div class="offline-conflict-head">
+                                <strong>@conflict.EntityType</strong>
+                                <span class="offline-badge offline-badge-warning">@conflict.ConflictType</span>
+                            </div>
+                            <p class="offline-help">Entité locale : @conflict.EntityLocalId</p>
+                            <p class="offline-help">Statut : @conflict.ResolutionStatus</p>
+                            @if (!string.IsNullOrWhiteSpace(conflict.LocalPayloadJson))
+                            {
+                                <details class="offline-payload-details">
+                                    <summary>Payload local</summary>
+                                    <pre>@conflict.LocalPayloadJson</pre>
+                                </details>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private bool busy;
+    private bool localSupported;
+    private string localProvider = "SQLite";
+    private string databaseName = "gestionstock-offline.db";
+    private int schemaScriptCount;
+    private string? localMessage;
+    private DateTime? lastBootstrapUtc;
+    private int articleCount;
+    private int depotCount;
+    private int clientCount;
+    private int fournisseurCount;
+    private string? message;
+    private bool messageIsError;
+    private OfflineSyncSummaryDto summary = new();
+    private List<SyncQueueItemLocal> queuePreview = new();
+    private List<SyncConflictLocal> conflicts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        schemaScriptCount = LocalDb.GetSchemaScripts().Count;
+        await ReloadWorkspaceAsync();
+        await InitializeOfflineAsync();
+    }
+
+    private async Task InitializeOfflineAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            var tenantCode = await Storage.GetItemAsStringAsync("tenantCode") ?? "default";
+            var userId = await Storage.GetItemAsStringAsync("userId") ?? await Storage.GetItemAsStringAsync("userEmail");
+            var result = await LocalDb.InitializeAsync(tenantCode, userId);
+
+            localSupported = result.Supported;
+            localProvider = result.Provider;
+            databaseName = result.DatabaseName;
+            schemaScriptCount = result.ScriptCount;
+            localMessage = result.Message;
+            message = result.Initialized
+                ? "Le poste local est prêt à être utilisé."
+                : "Le socle hors ligne est prêt, mais le moteur local n'est pas encore activé sur ce client.";
+            messageIsError = !result.Initialized;
+        });
+    }
+
+    private async Task ReloadWorkspaceAsync()
+    {
+        queuePreview = (await OfflineWorkspace.GetQueueAsync()).ToList();
+        conflicts = (await OfflineWorkspace.GetConflictsAsync()).ToList();
+        summary = OfflineState.BuildSummary(null, queuePreview.Count(x => string.Equals(x.Status, OfflineSyncStates.Pending, StringComparison.OrdinalIgnoreCase)));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadBootstrapAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            var bootstrap = await OfflineSync.GetBootstrapAsync();
+            if (bootstrap is null)
+            {
+                message = "La récupération serveur n'a renvoyé aucune donnée.";
+                messageIsError = true;
+                return;
+            }
+
+            lastBootstrapUtc = bootstrap.ServerUtc;
+            articleCount = bootstrap.Articles.Count;
+            depotCount = bootstrap.Depots.Count;
+            clientCount = bootstrap.Clients.Count;
+            fournisseurCount = bootstrap.Fournisseurs.Count;
+            message = "Les référentiels serveur ont bien été récupérés.";
+            messageIsError = false;
+        });
+    }
+
+    private async Task SyncQueueAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            if (queuePreview.Count == 0)
+            {
+                message = "Aucune opération hors ligne à synchroniser.";
+                messageIsError = true;
+                return;
+            }
+
+            var tenantCode = await Storage.GetItemAsStringAsync("tenantCode") ?? "default";
+            var userId = await Storage.GetItemAsStringAsync("userId") ?? await Storage.GetItemAsStringAsync("userEmail");
+
+            var request = new OfflinePushRequestDto
+            {
+                DeviceId = "browser-device",
+                TenantCode = tenantCode,
+                UserId = userId,
+                Operations = queuePreview
+                    .Where(x => string.Equals(x.Status, OfflineSyncStates.Pending, StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(x.Status, OfflineSyncStates.Rejected, StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(x.Status, OfflineSyncStates.Conflict, StringComparison.OrdinalIgnoreCase))
+                    .Select(x => new OfflineSyncOperationDto
+                    {
+                        EntityType = x.EntityType,
+                        EntityLocalId = x.EntityLocalId,
+                        OperationType = x.OperationType,
+                        PayloadJson = x.PayloadJson,
+                        CreatedAtUtc = x.CreatedAtUtc
+                    })
+                    .ToList()
+            };
+
+            if (request.Operations.Count == 0)
+            {
+                message = "Aucune opération éligible à la synchronisation.";
+                messageIsError = true;
+                return;
+            }
+
+            var response = await OfflineSync.PushAsync(request);
+            summary = OfflineState.BuildSummary(response, queuePreview.Count(x => string.Equals(x.Status, OfflineSyncStates.Pending, StringComparison.OrdinalIgnoreCase)));
+            OfflineState.ApplyResultsToQueue(queuePreview, response);
+            var newConflicts = OfflineState.BuildConflicts(request, response);
+            if (newConflicts.Count > 0)
+            {
+                conflicts = conflicts
+                    .Concat(newConflicts)
+                    .GroupBy(x => $"{x.EntityType}|{x.EntityLocalId}|{x.ConflictType}")
+                    .Select(g => g.OrderByDescending(x => x.CreatedAtUtc).First())
+                    .ToList();
+            }
+
+            await OfflineWorkspace.SaveQueueAsync(queuePreview);
+            await OfflineWorkspace.SaveConflictsAsync(conflicts);
+
+            summary = OfflineState.BuildSummary(response, queuePreview.Count(x => string.Equals(x.Status, OfflineSyncStates.Pending, StringComparison.OrdinalIgnoreCase)));
+            message = "Synchronisation terminée.";
+            messageIsError = false;
+        });
+    }
+
+    private async Task ClearConflictsAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            conflicts.Clear();
+            await OfflineWorkspace.ClearConflictsAsync();
+            message = "Les conflits locaux ont été nettoyés.";
+            messageIsError = false;
+        });
+    }
+
+    private string GetStatusBadgeClass(string status)
+    {
+        if (string.Equals(status, OfflineSyncStates.Applied, StringComparison.OrdinalIgnoreCase))
+            return "offline-badge-success";
+        if (string.Equals(status, OfflineSyncStates.Conflict, StringComparison.OrdinalIgnoreCase))
+            return "offline-badge-warning";
+        if (string.Equals(status, OfflineSyncStates.Rejected, StringComparison.OrdinalIgnoreCase))
+            return "offline-badge-danger";
+        return "offline-badge-muted";
+    }
+
+    private async Task RunBusyAsync(Func<Task> action)
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            messageIsError = true;
+        }
+        finally
+        {
+            busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetFocusTitle()
+    {
+        if (!localSupported)
+            return "Préparez d'abord le poste local";
+
+        if (conflicts.Count > 0)
+            return "Traitez les conflits avant de continuer";
+
+        if (queuePreview.Count > 0)
+            return "Synchronisez les opérations en attente";
+
+        if (lastBootstrapUtc is null)
+            return "Récupérez d'abord les référentiels serveur";
+
+        return "Votre espace hors ligne est prêt";
+    }
+
+    private string GetFocusText()
+    {
+        if (!localSupported)
+            return "Commencez par préparer le local pour disposer d'un espace de travail fiable sur ce poste ou cette tablette.";
+
+        if (conflicts.Count > 0)
+            return "Des éléments nécessitent votre attention. Consultez les conflits ci-dessous avant de relancer de nouvelles synchronisations.";
+
+        if (queuePreview.Count > 0)
+            return "Vous avez des opérations locales prêtes à être envoyées. Une synchronisation maintenant remettra vos données à jour côté serveur.";
+
+        if (lastBootstrapUtc is null)
+            return "Chargez les articles, dépôts, clients et fournisseurs afin d'offrir une meilleure continuité de service en cas de coupure.";
+
+        return "Aucune action urgente. Le poste est prêt pour le travail en ligne comme hors ligne.";
+    }
+}
+

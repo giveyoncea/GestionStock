@@ -1,0 +1,423 @@
+@page "/admin/tenants"
+@attribute [Authorize(Roles = "Admin")]
+@inject IApiService Api
+@inject Blazored.LocalStorage.ILocalStorageService Storage
+@inject NavigationManager Nav
+
+<PageTitle>Gestion des comptes - SuperAdmin</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Gestion des comptes</h1>
+        <p class="page-date">Administration multi-tenant</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau compte</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="tenant-grid">
+        @foreach (var t in tenants)
+        {
+            <div class="tenant-card @(t.EstActif ? "" : "tenant-card--suspended")"
+                 @onclick="() => OuvrirDetail(t)">
+                <div class="tenant-card-header">
+                    <div class="tenant-avatar">@(t.RaisonSociale.Length > 0 ? t.RaisonSociale[0].ToString().ToUpper() : "?")</div>
+                    <div class="tenant-info">
+                        <span class="tenant-name">@t.RaisonSociale</span>
+                        <code class="tenant-code">@t.Code</code>
+                    </div>
+                    <span class="badge @(t.EstActif ? "badge-green" : "badge-red")">
+                        @(t.EstActif ? "Actif" : "Suspendu")
+                    </span>
+                </div>
+                <div class="tenant-card-body">
+                    <div class="tenant-meta">
+                        <span>@t.Email</span>
+                        <span>@t.AdminNom</span>
+                        <span>@t.BaseDeDonnees</span>
+                        <span class="text-muted">@t.DateCreation.ToString("dd/MM/yyyy")</span>
+                    </div>
+                </div>
+                <div class="tenant-card-actions" @onclick:stopPropagation>
+                    @if (t.EstActif)
+                    {
+                        <button class="btn-sm btn-warn" @onclick="() => Suspendre(t.Code)">Suspendre</button>
+                    }
+                    else
+                    {
+                        <button class="btn-sm btn-success" @onclick="() => Activer(t.Code)">Activer</button>
+                    }
+                    <button class="btn-sm btn-secondary" @onclick="() => OuvrirReset(t)">Reinitialiser MDP</button>
+                    <button class="btn-sm btn-danger" @onclick="() => ConfirmerSuppression(t)">Supprimer</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!tenants.Any())
+    {
+        <div class="empty-state">Aucun compte tenant cree. Cliquez sur "Nouveau compte" pour commencer.</div>
+    }
+}
+
+@if (showCreation)
+{
+    <div class="modal-overlay" @onclick="() => showCreation = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>+ Nouveau compte client</h2>
+                <button class="btn-close" @onclick="() => showCreation = false">x</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale *</label>
+                        <input class="field-input" @bind="newRaisonSociale" placeholder="Ma Societe SAS" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Email administrateur *</label>
+                        <input class="field-input" type="email" @bind="newEmail" placeholder="admin@societe.com" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Nom de l'administrateur</label>
+                        <input class="field-input" @bind="newNomAdmin" placeholder="Prenom Nom" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Mot de passe * <span class="field-hint">(8 car. min)</span></label>
+                        <input class="field-input" type="password" @bind="newMotDePasse" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Confirmer</label>
+                        <input class="field-input" type="password" @bind="newConfirmation" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Devise *</label>
+                        <select class="field-input" @bind="newDevise">
+                            <option value="">- Selectionner -</option>
+                            <option value="EUR">EUR - Euro</option>
+                            <option value="USD">USD - Dollar americain</option>
+                            <option value="CAD">CAD - Dollar canadien</option>
+                            <option value="GBP">GBP - Livre sterling</option>
+                            <option value="MAD">MAD - Dirham marocain</option>
+                            <option value="XOF">XOF - Franc CFA (UEMOA)</option>
+                            <option value="XAF">XAF - Franc CFA (CEMAC)</option>
+                            <option value="XPF">XPF - Franc CFP (Pacifique)</option>
+                            <option value="DZD">DZD - Dinar algerien</option>
+                            <option value="TND">TND - Dinar tunisien</option>
+                            <option value="CHF">CHF - Franc suisse</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Symbole devise *</label>
+                        <input class="field-input" @bind="newSymboleDevise" placeholder="EUR, $, CFA, MAD" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Nb decimales montant *</label>
+                        <input class="field-input" type="number" min="0" max="6" @bind="newNombreDecimalesMontant" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Nb decimales quantite *</label>
+                        <input class="field-input" type="number" min="0" max="6" @bind="newNombreDecimalesQuantite" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="check-label">
+                            <input type="checkbox" @bind="newEnvoyerEmail" />
+                            Envoyer un email de bienvenue avec les acces
+                        </label>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(erreurCreation))
+                {
+                    <div class="alert-error" style="margin-top:12px">@erreurCreation</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showCreation = false">Annuler</button>
+                <button class="btn-primary" @onclick="CreerTenant" disabled="@saving">
+                    @(saving ? "Creation en cours..." : "Creer le compte et la base de donnees")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showDetail && tenantDetail != null)
+{
+    <div class="modal-overlay" @onclick="() => showDetail = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@tenantDetail.Tenant?.RaisonSociale</h2>
+                <button class="btn-close" @onclick="() => showDetail = false">x</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-sections">
+                    <div class="detail-section">
+                        <div class="detail-section-title">Informations du compte</div>
+                        <div class="detail-grid">
+                            <div class="detail-row"><span>Code tenant</span><code>@tenantDetail.Tenant?.Code</code></div>
+                            <div class="detail-row"><span>Email admin</span><span>@tenantDetail.Tenant?.Email</span></div>
+                            <div class="detail-row"><span>Administrateur</span><span>@tenantDetail.Tenant?.AdminNom</span></div>
+                            <div class="detail-row"><span>Base de donnees</span><code>@tenantDetail.Tenant?.BaseDeDonnees</code></div>
+                            <div class="detail-row">
+                                <span>Statut</span>
+                                <span class="badge @(tenantDetail.Tenant?.EstActif == true ? "badge-green" : "badge-red")">
+                                    @(tenantDetail.Tenant?.EstActif == true ? "Actif" : "Suspendu")
+                                </span>
+                            </div>
+                            <div class="detail-row"><span>Creation</span><span>@tenantDetail.Tenant?.DateCreation.ToString("dd/MM/yyyy HH:mm")</span></div>
+                        </div>
+                    </div>
+
+                    @if (tenantDetail.Stats != null)
+                    {
+                        <div class="detail-section">
+                            <div class="detail-section-title">Statistiques de la base de donnees</div>
+                            <div class="tenant-stats-grid">
+                                <div class="tenant-stat">
+                                    <span class="tenant-stat-val">@tenantDetail.Stats.Articles</span>
+                                    <span class="tenant-stat-lbl">Articles actifs</span>
+                                </div>
+                                <div class="tenant-stat">
+                                    <span class="tenant-stat-val">@tenantDetail.Stats.Fournisseurs</span>
+                                    <span class="tenant-stat-lbl">Fournisseurs</span>
+                                </div>
+                                <div class="tenant-stat">
+                                    <span class="tenant-stat-val">@tenantDetail.Stats.TotalMouvements</span>
+                                    <span class="tenant-stat-lbl">Mouvements</span>
+                                </div>
+                                <div class="tenant-stat">
+                                    <span class="tenant-stat-val">@tenantDetail.Stats.Utilisateurs</span>
+                                    <span class="tenant-stat-lbl">Utilisateurs</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert-error" style="margin-top:12px">Base de donnees inaccessible.</div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showDetail = false">Fermer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showReset)
+{
+    <div class="modal-overlay" @onclick="() => showReset = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Reinitialiser le mot de passe</h2>
+                <button class="btn-close" @onclick="() => showReset = false">x</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom:16px">Compte : <strong>@resetTenantCode</strong></p>
+                <div class="field-group">
+                    <label class="field-label">Nouveau mot de passe *</label>
+                    <input class="field-input" type="password" @bind="resetMotDePasse" />
+                </div>
+                @if (!string.IsNullOrEmpty(erreurReset))
+                {
+                    <div class="alert-error" style="margin-top:8px">@erreurReset</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showReset = false">Annuler</button>
+                <button class="btn-primary" @onclick="ExecuterReset" disabled="@saving">
+                    @(saving ? "En cours..." : "Reinitialiser")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showConfirmSuppr)
+{
+    <div class="modal-overlay" @onclick="() => showConfirmSuppr = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Confirmer la desactivation</h2>
+                <button class="btn-close" @onclick="() => showConfirmSuppr = false">x</button>
+            </div>
+            <div class="modal-body">
+                <p>Vous allez desactiver le compte <strong>@supprimerCode</strong>.</p>
+                <p class="text-muted" style="font-size:13px">La base de donnees ne sera pas supprimee.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showConfirmSuppr = false">Annuler</button>
+                <button class="btn-danger" @onclick="ExecuterSuppression" disabled="@saving">
+                    @(saving ? "En cours..." : "Desactiver")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<TenantDto> tenants = new();
+    private TenantDetailDto? tenantDetail;
+    private bool chargement = true, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private bool showCreation = false;
+    private string newRaisonSociale = "", newEmail = "", newNomAdmin = "";
+    private string newMotDePasse = "", newConfirmation = "";
+    private string newDevise = "EUR", newSymboleDevise = "EUR";
+    private int newNombreDecimalesMontant = 2, newNombreDecimalesQuantite = 3;
+    private bool newEnvoyerEmail = true;
+    private string? erreurCreation;
+
+    private bool showDetail = false;
+
+    private bool showReset = false;
+    private string resetTenantCode = "";
+    private string resetMotDePasse = "";
+    private string? erreurReset;
+
+    private bool showConfirmSuppr = false;
+    private string supprimerCode = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tenant = await Storage.GetItemAsStringAsync("tenantCode") ?? "";
+        if (!string.IsNullOrEmpty(tenant))
+        {
+            Nav.NavigateTo("/", replace: true);
+            return;
+        }
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        chargement = true;
+        var r = await Api.GetTenantsAsync();
+        tenants = r ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirCreation()
+    {
+        newRaisonSociale = newEmail = newNomAdmin = newMotDePasse = newConfirmation = "";
+        newDevise = "EUR";
+        newSymboleDevise = "EUR";
+        newNombreDecimalesMontant = 2;
+        newNombreDecimalesQuantite = 3;
+        newEnvoyerEmail = true;
+        erreurCreation = null;
+        showCreation = true;
+    }
+
+    private async Task CreerTenant()
+    {
+        erreurCreation = null;
+        if (string.IsNullOrWhiteSpace(newRaisonSociale)) { erreurCreation = "Raison sociale obligatoire."; return; }
+        if (string.IsNullOrWhiteSpace(newEmail) || !newEmail.Contains('@')) { erreurCreation = "Email invalide."; return; }
+        if (string.IsNullOrWhiteSpace(newDevise)) { erreurCreation = "La devise est obligatoire."; return; }
+        if (string.IsNullOrWhiteSpace(newSymboleDevise)) { erreurCreation = "Le symbole de devise est obligatoire."; return; }
+        if (newNombreDecimalesMontant < 0 || newNombreDecimalesMontant > 6) { erreurCreation = "Le nombre de decimales montant doit etre compris entre 0 et 6."; return; }
+        if (newNombreDecimalesQuantite < 0 || newNombreDecimalesQuantite > 6) { erreurCreation = "Le nombre de decimales quantite doit etre compris entre 0 et 6."; return; }
+        if (newMotDePasse.Length < 8) { erreurCreation = "Mot de passe trop court."; return; }
+        if (newMotDePasse != newConfirmation) { erreurCreation = "Mots de passe differents."; return; }
+
+        saving = true;
+        var r = await Api.CreerTenantAsync(new TenantCreateRequest
+        {
+            RaisonSociale = newRaisonSociale,
+            Email = newEmail,
+            NomAdmin = newNomAdmin,
+            MotDePasse = newMotDePasse,
+            Devise = newDevise,
+            SymboleDevise = newSymboleDevise,
+            NombreDecimalesMontant = newNombreDecimalesMontant,
+            NombreDecimalesQuantite = newNombreDecimalesQuantite,
+            EnvoyerEmail = newEnvoyerEmail
+        });
+        saving = false;
+
+        if (r?.Succes == true)
+        {
+            showCreation = false;
+            msgCls = "alert-success";
+            message = r.Message;
+            await Load();
+        }
+        else
+        {
+            erreurCreation = r?.Message ?? "Erreur lors de la creation.";
+        }
+    }
+
+    private async Task OuvrirDetail(TenantDto t)
+    {
+        tenantDetail = await Api.GetTenantDetailAsync(t.Code);
+        showDetail = true;
+    }
+
+    private async Task Activer(string code)
+    {
+        var r = await Api.ActiverTenantAsync(code);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        await Load();
+    }
+
+    private async Task Suspendre(string code)
+    {
+        var r = await Api.SusprendreTenantAsync(code);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        await Load();
+    }
+
+    private void OuvrirReset(TenantDto t)
+    {
+        resetTenantCode = t.Code;
+        resetMotDePasse = "";
+        erreurReset = null;
+        showReset = true;
+    }
+
+    private async Task ExecuterReset()
+    {
+        if (resetMotDePasse.Length < 8) { erreurReset = "Mot de passe trop court."; return; }
+        saving = true;
+        var r = await Api.ResetPasswordTenantAsync(resetTenantCode, resetMotDePasse);
+        saving = false;
+        if (r?.Succes == true) { showReset = false; msgCls = "alert-success"; message = r.Message; }
+        else erreurReset = r?.Message ?? "Erreur.";
+    }
+
+    private void ConfirmerSuppression(TenantDto t)
+    {
+        supprimerCode = t.Code;
+        showConfirmSuppr = true;
+    }
+
+    private async Task ExecuterSuppression()
+    {
+        saving = true;
+        var r = await Api.SupprimerTenantAsync(supprimerCode);
+        saving = false;
+        showConfirmSuppr = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        await Load();
+    }
+}

@@ -1,0 +1,732 @@
+﻿@page "/parametres"
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Components.Forms
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject IThemeService Theme
+
+<PageTitle>Paramètres</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Paramètres</h1>
+        <p class="page-subtitle">Réglez l'identité de l'entreprise, l'apparence, l'impression et les préférences de travail depuis un seul écran.</p>
+    </div>
+    @if (lastSave != null)
+    {
+        <span class="page-date">Dernière sauvegarde : @lastSave</span>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <section class="settings-hero-card">
+        <div class="settings-hero-copy">
+            <span class="settings-hero-eyebrow">Configuration guidée</span>
+            <h2>Un espace de paramétrage plus lisible et plus serein</h2>
+            <p>Les sections sont regroupées par usage pour vous aider à retrouver plus vite l'information utile, sans toucher aux règles métier déjà en place.</p>
+        </div>
+        <div class="settings-hero-chips">
+            <span class="settings-hero-chip">Entreprise</span>
+            <span class="settings-hero-chip">Stock</span>
+            <span class="settings-hero-chip">Impressions</span>
+            <span class="settings-hero-chip">Comptabilité</span>
+        </div>
+    </section>
+
+    <div class="settings-layout">
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">ENT</span>
+                <h2>Données de l'entreprise</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale *</label>
+                        <input class="field-input" @bind="raisonSociale" placeholder="Ma Société SAS" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">SIRET</label>
+                        <input class="field-input" @bind="siret" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">N° TVA</label>
+                        <input class="field-input" @bind="numTVA" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Téléphone</label>
+                        <input class="field-input" @bind="telephone" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email</label>
+                        <input class="field-input" type="email" @bind="email" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Site web</label>
+                        <input class="field-input" @bind="siteWeb" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Forme juridique</label>
+                        <select class="field-input" @bind="formeJuridique">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="SAS">SAS</option>
+                            <option value="SASU">SASU</option>
+                            <option value="SARL">SARL</option>
+                            <option value="EURL">EURL</option>
+                            <option value="SA">SA</option>
+                            <option value="EI">Entreprise individuelle</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">ADR</span>
+                <h2>Adresse du siège</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Adresse</label>
+                        <input class="field-input" @bind="adresse" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Code postal</label>
+                        <input class="field-input" @bind="codePostal" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="ville" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Région</label>
+                        <input class="field-input" @bind="region" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Pays</label>
+                        <input class="field-input" @bind="pays" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">STK</span>
+                <h2>Paramètres stock</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Méthode de valorisation</label>
+                        <select class="field-input" @bind="methodeValorisation">
+                            <option value="FIFO">FIFO</option>
+                            <option value="FEFO">FEFO</option>
+                            <option value="LIFO">LIFO</option>
+                            <option value="CMUP">CMUP</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Gabarit interface</label>
+                        <select class="field-input" @bind="gabaritInterface">
+                            <option value="STANDARD">Standard</option>
+                            <option value="MARBRE_BLEU">Marbre Bleu Pro 75% / 25%</option>
+                        </select>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <div class="template-preview-grid">
+                            <button type="button"
+                                    class="template-preview-card @(gabaritInterface == "STANDARD" ? "template-preview-card--active" : "")"
+                                    @onclick='() => gabaritInterface = "STANDARD"'>
+                                <span class="template-preview-swatch template-preview-swatch--standard"></span>
+                                <span class="template-preview-copy">
+                                    <strong>Standard</strong>
+                                    <span>Interface sobre, contrastée et orientée exploitation.</span>
+                                </span>
+                            </button>
+                            <button type="button"
+                                    class="template-preview-card @(gabaritInterface == "MARBRE_BLEU" ? "template-preview-card--active" : "")"
+                                    @onclick='() => gabaritInterface = "MARBRE_BLEU"'>
+                                <span class="template-preview-swatch template-preview-swatch--marbre"></span>
+                                <span class="template-preview-copy">
+                                    <strong>Marbre Bleu Pro</strong>
+                                    <span>Ambiance claire, professionnelle et conviviale avec marbre clair 75% et bleus 25%.</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Devise</label>
+                        <select class="field-input" @bind="devise" disabled>
+                            <option value="EUR">EUR - Euro</option>
+                            <option value="USD">USD - Dollar américain</option>
+                            <option value="CAD">CAD - Dollar canadien</option>
+                            <option value="GBP">GBP - Livre sterling</option>
+                            <option value="MAD">MAD - Dirham marocain</option>
+                            <option value="XOF">XOF - Franc CFA (UEMOA)</option>
+                            <option value="XAF">XAF - Franc CFA (CEMAC)</option>
+                            <option value="XPF">XPF - Franc CFP (Pacifique)</option>
+                            <option value="DZD">DZD - Dinar algérien</option>
+                            <option value="TND">TND - Dinar tunisien</option>
+                            <option value="CHF">CHF - Franc suisse</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Symbole devise</label>
+                        <input class="field-input" @bind="symboleDevise" placeholder="EUR, $, CFA, MAD" disabled />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Nb décimales montant</label>
+                        <input class="field-input" type="number" min="0" max="6" @bind="nombreDecimalesMontant" disabled />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Nb décimales quantité</label>
+                        <input class="field-input" type="number" min="0" max="6" @bind="nombreDecimalesQuantite" disabled />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <span class="field-hint">Ces valeurs sont définies à la création de la société et ne peuvent plus être modifiées.</span>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <span class="field-hint">Le gabarit Marbre Bleu Pro privilégie un fond minéral très clair à 75% avec des accents bleus à 25% pour un rendu plus premium.</span>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Taux TVA (%)</label>
+                        <input class="field-input" type="number" step="0.1" @bind="tauxTVA" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Alerte péremption (jours)</label>
+                        <input class="field-input" type="number" @bind="delaiAlerteDLUO" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">NUM</span>
+                <h2>Numérotation</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Préfixe commandes</label>
+                        <input class="field-input" @bind="prefixeCA" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Préfixe articles</label>
+                        <input class="field-input" @bind="prefixeArt" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Préfixe lots</label>
+                        <input class="field-input" @bind="prefixeLot" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Préfixe inventaires</label>
+                        <input class="field-input" @bind="prefixeInv" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">BAN</span>
+                <h2>Informations bancaires</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Banque</label>
+                        <input class="field-input" @bind="banque" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">IBAN</label>
+                        <input class="field-input" @bind="iban" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">BIC</label>
+                        <input class="field-input" @bind="bic" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Delai paiement (j)</label>
+                        <input class="field-input" type="number" @bind="delaiPaiement" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">ðŸ–¨ï¸</span>
+                <h2>Impressions</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Logo entreprise</label>
+                        <InputFile OnChange="ChargerLogo" accept="image/png,image/jpeg,image/svg+xml,image/webp" />
+                        <span class="field-hint">Le logo s'affichera sur les documents et les reçus imprimés.</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(logoEntreprise))
+                    {
+                        <div class="field-group">
+                            <label class="field-label">Aperçu</label>
+                            <div class="field-input" style="min-height:120px;display:flex;align-items:center;justify-content:center;padding:12px;background:#fff">
+                                <img src="@logoEntreprise" alt="Logo entreprise" style="max-width:100%;max-height:96px;object-fit:contain" />
+                            </div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Source logo</label>
+                            <textarea class="field-input" rows="5" @bind="logoEntreprise" placeholder="Data URI du logo"></textarea>
+                            <button type="button" class="btn-secondary" style="margin-top:8px" @onclick="SupprimerLogo">Supprimer le logo</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="field-group col-span-2">
+                            <label class="field-label">Source logo</label>
+                            <textarea class="field-input" rows="4" @bind="logoEntreprise" placeholder="Collez ici une URL ou un data URI si vous ne passez pas par le téléversement"></textarea>
+                        </div>
+                    }
+                    <div class="field-group">
+                        <label class="field-label">Format imprimé documents</label>
+                        <select class="field-input" @bind="formatImpressionDocuments">
+                            <option value="STANDARD">Standard</option>
+                            <option value="PROFESSIONNEL">Professionnel</option>
+                            <option value="COMPACT">Compact</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Papier documents</label>
+                        <select class="field-input" @bind="formatPapierDocuments">
+                            <option value="A4">A4</option>
+                            <option value="A5">A5</option>
+                            <option value="80MM">80 mm</option>
+                        </select>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Imprimante documents par défaut</label>
+                        <input class="field-input" @bind="imprimanteDocumentsDefaut" placeholder="Ex. HP LaserJet Bureau" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Format imprimé reçus</label>
+                        <select class="field-input" @bind="formatImpressionRecus">
+                            <option value="STANDARD">Standard</option>
+                            <option value="PROFESSIONNEL">Professionnel</option>
+                            <option value="COMPACT">Compact</option>
+                        </select>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Papier reçus</label>
+                        <select class="field-input" @bind="formatPapierRecus">
+                            <option value="A5">A5</option>
+                            <option value="2X_A5_A4">2 x A5 sur A4</option>
+                            <option value="A4">A4</option>
+                            <option value="80MM">80 mm</option>
+                        </select>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Imprimante reçus par défaut</label>
+                        <input class="field-input" @bind="imprimanteRecusDefaut" placeholder="Ex. Epson Tickets Accueil" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <span class="field-hint">Le format Professionnel privilégie un rendu plus institutionnel. Le format Compact densifie la mise en page pour les impressions courtes.</span>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <span class="field-hint">Le nom d'imprimante est mémorisé comme préférence. Le choix effectif reste confirmé dans la boîte d'impression du navigateur.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Comptes gÃ©nÃ©raux des tiers *@
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">CPT</span>
+                <h2>Comptes généraux des tiers</h2>
+            </div>
+            <div class="settings-card-body">
+                <h4 class="compta-group-title">Clients</h4>
+                <div class="form-grid compta-grid">
+                    <div class="field-group">
+                        <label class="field-label">Clients (défaut)</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteClientDefaut" placeholder="411000" />
+                            <span class="compta-hint">Créances clients</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Clients étrangers</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteClientEtranger" placeholder="411100" />
+                            <span class="compta-hint">Hors UE / export</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Clients douteux</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteClientDouteux" placeholder="416000" />
+                            <span class="compta-hint">Creances litigieuses</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Acomptes clients</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteAcompteClient" placeholder="419000" />
+                            <span class="compta-hint">Avances reçues</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="compta-group-title" style="margin-top:16px">Fournisseurs</h4>
+                <div class="form-grid compta-grid">
+                    <div class="field-group">
+                        <label class="field-label">Fournisseurs (défaut)</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteFournisseurDefaut" placeholder="401000" />
+                            <span class="compta-hint">Dettes fournisseurs</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Fournisseurs etrangers</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteFournisseurEtranger" placeholder="401100" />
+                            <span class="compta-hint">Hors UE / import</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Acomptes fournisseurs</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteAcompteFournisseur" placeholder="409000" />
+                            <span class="compta-hint">Avances versees</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="compta-group-title" style="margin-top:16px">TVA</h4>
+                <div class="form-grid compta-grid">
+                    <div class="field-group">
+                        <label class="field-label">TVA collectée</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteTVACollectee" placeholder="445710" />
+                            <span class="compta-hint">Sur debits</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">TVA déductible</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteTVADeductible" placeholder="445660" />
+                            <span class="compta-hint">Sur autres biens</span>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">TVA sur encaissements</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteTVASurEncaissements" placeholder="445720" />
+                            <span class="compta-hint">Regime encaissements</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 class="compta-group-title" style="margin-top:16px">Produits & Charges</h4>
+                <div class="form-grid compta-grid">
+                    <div class="field-group">
+                        <label class="field-label">Vente marchandises</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteVenteMarchandises" placeholder="707000" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Vente prestations</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteVentePrestations" placeholder="706000" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Achat marchandises</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteAchatMarchandises" placeholder="607000" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Achat matieres</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteAchatMatieres" placeholder="601000" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Frais de port</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteFraisPort" placeholder="624100" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Remises accordees</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteRemiseAccordee" placeholder="709000" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Remises obtenues</label>
+                        <div class="compta-field-wrap">
+                            <input class="field-input field-input--compta" @bind="cpt.CompteRemiseObtenue" placeholder="609000" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Journaux comptables *@
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <span class="settings-icon">JNL</span>
+                <h2>Journaux comptables</h2>
+            </div>
+            <div class="settings-card-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Régime TVA</label>
+                        <select class="field-input" @bind="cpt.RegimeTVA">
+                            <option value="1">Regime normal (sur debits)</option>
+                            <option value="2">Regime sur encaissements</option>
+                            <option value="3">Franchise en base de TVA</option>
+                        </select>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Format export comptabilité</label>
+                        <select class="field-input" @bind="cpt.FormatExportCompta">
+                            <option value="SAGE">Sage (CSV)</option>
+                            <option value="CIEL">Ciel (TXT)</option>
+                            <option value="EBP">EBP (CSV)</option>
+                            <option value="FEC">FEC (norme DGFiP)</option>
+                            <option value="CSV">CSV generique</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="journals-grid" style="margin-top:12px">
+                    @foreach (var jnl in JournauxList)
+                    {
+                        <div class="journal-row">
+                            <span class="journal-badge">@jnl.Badge</span>
+                            <div class="journal-fields">
+                                <div class="field-group" style="flex:0 0 100px">
+                                    <label class="field-label">Code</label>
+                                    <input class="field-input" value="@GetJournalCode(jnl.Key)"
+                                           @onchange="e => SetJournalCode(jnl.Key, e.Value?.ToString() ?? string.Empty)"
+                                           maxlength="10" />
+                                </div>
+                                <div class="field-group" style="flex:1">
+                                    <label class="field-label">Libelle</label>
+                                    <input class="field-input" value="@GetJournalLibelle(jnl.Key)"
+                                           @onchange="e => SetJournalLibelle(jnl.Key, e.Value?.ToString() ?? string.Empty)" />
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="settings-actions">
+        <button class="btn-secondary" @onclick="Reinitialiser">Annuler les modifications</button>
+        <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">@savingLabel</button>
+    </div>
+}
+
+@code {
+    private bool chargement = true, saving = false;
+    private string? message, lastSave;
+    private string msgCls = "alert-success";
+    private string savingLabel = "Enregistrer les paramètres";
+
+    private string raisonSociale = "", siret = "", numTVA = "";
+    private string telephone = "", email = "", siteWeb = "", formeJuridique = "";
+    private string adresse = "", codePostal = "", ville = "", region = "", pays = "France";
+    private string methodeValorisation = "FEFO", gabaritInterface = "STANDARD", devise = "EUR", symboleDevise = "EUR";
+    private string logoEntreprise = "", formatImpressionDocuments = "STANDARD", formatImpressionRecus = "STANDARD";
+    private string formatPapierDocuments = "A4", imprimanteDocumentsDefaut = "";
+    private string formatPapierRecus = "A5", imprimanteRecusDefaut = "";
+    private int nombreDecimalesMontant = 2, nombreDecimalesQuantite = 3;
+    private decimal tauxTVA = 20m;
+    private int delaiAlerteDLUO = 30, delaiPaiement = 30;
+    private string prefixeCA = "CA", prefixeArt = "ART", prefixeLot = "LOT", prefixeInv = "INV";
+    private string banque = "", iban = "", bic = "";
+    private ComptabiliteDto cpt = new();
+
+    private ParametresDto? _snapshot;
+
+    protected override async Task OnInitializedAsync()
+    {
+        chargement = true;
+        var p = await Api.GetParametresAsync();
+        if (p != null) ApplyFromDto(p);
+        _snapshot = BuildDto();
+        cpt = await Api.GetComptabiliteAsync() ?? new();
+        chargement = false;
+    }
+
+    private void ApplyFromDto(ParametresDto p)
+    {
+        raisonSociale = p.RaisonSociale; siret = p.Siret; numTVA = p.NumTVA;
+        telephone = p.Telephone; email = p.Email; siteWeb = p.SiteWeb;
+        formeJuridique = p.FormeJuridique; adresse = p.Adresse;
+        codePostal = p.CodePostal; ville = p.Ville; region = p.Region; pays = p.Pays;
+        methodeValorisation = p.MethodeValorisation; gabaritInterface = p.GabaritInterface; devise = p.Devise;
+        logoEntreprise = p.LogoEntreprise; formatImpressionDocuments = p.FormatImpressionDocuments;
+        formatImpressionRecus = p.FormatImpressionRecus;
+        formatPapierDocuments = p.FormatPapierDocuments;
+        imprimanteDocumentsDefaut = p.ImprimanteDocumentsDefaut;
+        formatPapierRecus = p.FormatPapierRecus;
+        imprimanteRecusDefaut = p.ImprimanteRecusDefaut;
+        symboleDevise = p.SymboleDevise; nombreDecimalesMontant = p.NombreDecimalesMontant;
+        nombreDecimalesQuantite = p.NombreDecimalesQuantite;
+        tauxTVA = p.TauxTVA; delaiAlerteDLUO = p.DelaiAlerteDLUO;
+        prefixeCA = p.PrefixeCA; prefixeArt = p.PrefixeArt;
+        prefixeLot = p.PrefixeLot; prefixeInv = p.PrefixeInv;
+        banque = p.Banque; iban = p.Iban; bic = p.Bic; delaiPaiement = p.DelaiPaiement;
+        if (p.UpdatedAt.HasValue)
+            lastSave = p.UpdatedAt.Value.ToString("dd/MM/yyyy HH:mm");
+    }
+
+    private ParametresDto BuildDto() => new()
+    {
+        RaisonSociale = raisonSociale, Siret = siret, NumTVA = numTVA,
+        Telephone = telephone, Email = email, SiteWeb = siteWeb,
+        FormeJuridique = formeJuridique, Adresse = adresse,
+        CodePostal = codePostal, Ville = ville, Region = region, Pays = pays,
+        MethodeValorisation = methodeValorisation, GabaritInterface = gabaritInterface, Devise = devise,
+        LogoEntreprise = logoEntreprise,
+        FormatImpressionDocuments = formatImpressionDocuments,
+        FormatImpressionRecus = formatImpressionRecus,
+        FormatPapierDocuments = formatPapierDocuments,
+        ImprimanteDocumentsDefaut = imprimanteDocumentsDefaut,
+        FormatPapierRecus = formatPapierRecus,
+        ImprimanteRecusDefaut = imprimanteRecusDefaut,
+        SymboleDevise = symboleDevise,
+        NombreDecimalesMontant = nombreDecimalesMontant,
+        NombreDecimalesQuantite = nombreDecimalesQuantite,
+        TauxTVA = tauxTVA, DelaiAlerteDLUO = delaiAlerteDLUO,
+        PrefixeCA = prefixeCA, PrefixeArt = prefixeArt,
+        PrefixeLot = prefixeLot, PrefixeInv = prefixeInv,
+        Banque = banque, Iban = iban, Bic = bic, DelaiPaiement = delaiPaiement
+    };
+
+    private async Task Sauvegarder()
+    {
+        if (string.IsNullOrWhiteSpace(raisonSociale))
+        {
+            msgCls = "alert-error";
+            message = "La raison sociale est obligatoire.";
+            return;
+        }
+        saving = true;
+        savingLabel = "Enregistrement...";
+        var r = await Api.SauvegarderParametresAsync(BuildDto());
+        // Sauvegarder aussi les parametres comptables
+        await Api.SauvegarderComptabiliteAsync(cpt);
+        saving = false;
+        savingLabel = "Enregistrer les paramètres";
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true)
+        {
+            await Devise.RefreshAsync();
+            await Theme.RefreshAsync();
+            _snapshot = BuildDto();
+            var updated = await Api.GetParametresAsync();
+            if (updated?.UpdatedAt.HasValue == true)
+                lastSave = updated.UpdatedAt.Value.ToString("dd/MM/yyyy HH:mm");
+        }
+    }
+
+    private async Task ChargerLogo(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+            return;
+
+        if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            msgCls = "alert-error";
+            message = "Le logo doit etre une image.";
+            return;
+        }
+
+        await using var stream = file.OpenReadStream(2 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        logoEntreprise = $"data:{file.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+    }
+
+    private void SupprimerLogo()
+    {
+        logoEntreprise = string.Empty;
+    }
+
+    private record JournalItem(string Badge, string Key);
+    private static readonly JournalItem[] JournauxList = {
+        new("VT","Ventes"), new("AC","Achats"), new("BQ","Banque"),
+        new("CA","Caisse"), new("OD","Op. diverses"), new("AN","A nouveaux")
+    };
+
+    private void Reinitialiser()
+    {
+        if (_snapshot != null) ApplyFromDto(_snapshot);
+        message = null;
+    }
+
+    private string GetJournalCode(string label) => label switch {
+        "Ventes" => cpt.JournalVentes, "Achats" => cpt.JournalAchats,
+        "Banque" => cpt.JournalBanque, "Caisse" => cpt.JournalCaisse,
+        "Op. diverses" => cpt.JournalOD, "A nouveaux" => cpt.JournalANouveaux,
+        _ => ""
+    };
+
+    private string GetJournalLibelle(string label) => label switch {
+        "Ventes" => cpt.JournalVentesLibelle, "Achats" => cpt.JournalAchatsLibelle,
+        "Banque" => cpt.JournalBanqueLibelle, "Caisse" => cpt.JournalCaisseLibelle,
+        "Op. diverses" => cpt.JournalODLibelle, "A nouveaux" => cpt.JournalANouveauxLibelle,
+        _ => ""
+    };
+
+    private void SetJournalCode(string label, string val)
+    {
+        switch (label) {
+            case "Ventes": cpt.JournalVentes=val; break;
+            case "Achats": cpt.JournalAchats=val; break;
+            case "Banque": cpt.JournalBanque=val; break;
+            case "Caisse": cpt.JournalCaisse=val; break;
+            case "Op. diverses": cpt.JournalOD=val; break;
+            case "A nouveaux": cpt.JournalANouveaux=val; break;
+        }
+    }
+
+    private void SetJournalLibelle(string label, string val)
+    {
+        switch (label) {
+            case "Ventes": cpt.JournalVentesLibelle=val; break;
+            case "Achats": cpt.JournalAchatsLibelle=val; break;
+            case "Banque": cpt.JournalBanqueLibelle=val; break;
+            case "Caisse": cpt.JournalCaisseLibelle=val; break;
+            case "Op. diverses": cpt.JournalODLibelle=val; break;
+            case "A nouveaux": cpt.JournalANouveauxLibelle=val; break;
+        }
+    }
+}

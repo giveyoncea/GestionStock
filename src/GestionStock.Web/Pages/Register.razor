@@ -1,0 +1,231 @@
+@page "/register"
+@layout EmptyLayout
+@inject IApiService Api
+@inject NavigationManager Nav
+
+<PageTitle>Creer un compte - GestionStock</PageTitle>
+
+<div class="auth-wrapper">
+    <div class="register-card">
+
+        <div class="auth-logo">
+            <div class="logo-mark">GS</div>
+            <div class="logo-text">
+                <span class="logo-title">GestionStock</span>
+                <span class="logo-sub">WMS · SCM</span>
+            </div>
+        </div>
+
+        @if (succes)
+        {
+            <div class="register-success">
+                <div class="success-icon">✓</div>
+                <h2>Compte cree avec succes !</h2>
+
+                <div class="tenant-code-display">
+                    <div class="tenant-code-label">Votre code tenant</div>
+                    <div class="tenant-code-value">@tenantCode</div>
+                    <div class="tenant-code-hint">Notez ce code - il vous sera demande a chaque connexion</div>
+                </div>
+
+                <div class="success-info">
+                    <div class="info-row">
+                        <span class="info-label">Email de connexion</span>
+                        <span class="info-value">@email</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Mot de passe</span>
+                        <span class="info-value">Celui saisi lors de l'inscription</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Email de bienvenue</span>
+                        <span class="info-value @(emailEnvoye ? "text-success" : "text-warn")">
+                            @(emailEnvoye ? "✓ Envoye" : "✗ Non envoye (SMTP non configure)")
+                        </span>
+                    </div>
+                </div>
+
+                @if (!emailEnvoye)
+                {
+                    <div class="smtp-hint">
+                        Pour activer les emails, configurez <code>SmtpSettings</code> dans
+                        <code>appsettings.json</code> et redemarrez l'API.
+                    </div>
+                }
+
+                <button class="btn-primary btn-full" @onclick="IrVersLogin">
+                    Acceder a la connexion ->
+                </button>
+            </div>
+        }
+        else
+        {
+            <h1 class="auth-title">Creer votre espace</h1>
+            <p class="auth-subtitle">Votre base de donnees dediee sera creee automatiquement.</p>
+
+            @if (!string.IsNullOrEmpty(erreur))
+            {
+                <div class="alert-error">@erreur</div>
+            }
+
+            <div class="form-section">
+                <div class="form-section-title">Votre entreprise</div>
+                <div class="field-group">
+                    <label class="field-label">Raison sociale *</label>
+                    <input class="field-input" @bind="raisonSociale" placeholder="Ma Societe SAS" />
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Devise *</label>
+                    <select class="field-input" @bind="devise">
+                        <option value="">- Selectionner -</option>
+                        <option value="EUR">EUR - Euro</option>
+                        <option value="USD">USD - Dollar americain</option>
+                        <option value="CAD">CAD - Dollar canadien</option>
+                        <option value="GBP">GBP - Livre sterling</option>
+                        <option value="MAD">MAD - Dirham marocain</option>
+                        <option value="XOF">XOF - Franc CFA (UEMOA)</option>
+                        <option value="XAF">XAF - Franc CFA (CEMAC)</option>
+                        <option value="XPF">XPF - Franc CFP (Pacifique)</option>
+                        <option value="DZD">DZD - Dinar algerien</option>
+                        <option value="TND">TND - Dinar tunisien</option>
+                        <option value="CHF">CHF - Franc suisse</option>
+                    </select>
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Symbole devise *</label>
+                    <input class="field-input" @bind="symboleDevise" placeholder="EUR, $, CFA, MAD" />
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Nb decimales montant *</label>
+                    <input class="field-input" type="number" min="0" max="6" @bind="nombreDecimalesMontant" />
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Nb decimales quantite *</label>
+                    <input class="field-input" type="number" min="0" max="6" @bind="nombreDecimalesQuantite" />
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-title">Compte administrateur</div>
+                <div class="field-group">
+                    <label class="field-label">Nom complet</label>
+                    <input class="field-input" @bind="nomAdmin" placeholder="Prenom Nom" />
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Email *</label>
+                    <input class="field-input" type="email" @bind="email"
+                           @onblur="VerifierEmail" placeholder="admin@monentreprise.com" />
+                    @if (emailIndisponible)
+                    {
+                        <span class="field-error">Cet email est deja associe a un compte.</span>
+                    }
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Mot de passe * <span class="field-hint">(8 caracteres min.)</span></label>
+                    <input class="field-input" type="password" @bind="motDePasse" />
+                </div>
+                <div class="field-group">
+                    <label class="field-label">Confirmer le mot de passe *</label>
+                    <input class="field-input" type="password" @bind="confirmation" />
+                    @if (!string.IsNullOrEmpty(motDePasse) && !string.IsNullOrEmpty(confirmation) && motDePasse != confirmation)
+                    {
+                        <span class="field-error">Les mots de passe ne correspondent pas.</span>
+                    }
+                </div>
+            </div>
+
+            <div class="field-group field-checks">
+                <label class="check-label">
+                    <input type="checkbox" @bind="conditions" />
+                    J'accepte les <a href="#" class="link-amber">conditions d'utilisation</a>
+                </label>
+            </div>
+
+            <button class="btn-primary btn-full" @onclick="Inscrire"
+                    disabled="@(chargement || emailIndisponible)">
+                @btnLabel
+            </button>
+
+            <div class="auth-footer">
+                Deja un compte ? <a href="/login" class="link-amber">Se connecter</a>
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+    private string raisonSociale = "", nomAdmin = "", email = "";
+    private string motDePasse = "", confirmation = "";
+    private string devise = "EUR", symboleDevise = "EUR";
+    private int nombreDecimalesMontant = 2, nombreDecimalesQuantite = 3;
+    private bool conditions = false, chargement = false;
+    private bool succes = false, emailIndisponible = false;
+    private string? erreur, tenantCode;
+    private bool emailEnvoye;
+    private string btnLabel = "Creer mon espace gratuitement";
+
+    private async Task VerifierEmail()
+    {
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@')) return;
+        emailIndisponible = !await Api.EmailDisponibleAsync(email);
+    }
+
+    private async Task Inscrire()
+    {
+        erreur = null;
+
+        if (string.IsNullOrWhiteSpace(raisonSociale))
+        { erreur = "La raison sociale est obligatoire."; return; }
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        { erreur = "Email invalide."; return; }
+        if (string.IsNullOrWhiteSpace(devise))
+        { erreur = "La devise est obligatoire."; return; }
+        if (string.IsNullOrWhiteSpace(symboleDevise))
+        { erreur = "Le symbole de devise est obligatoire."; return; }
+        if (nombreDecimalesMontant < 0 || nombreDecimalesMontant > 6)
+        { erreur = "Le nombre de decimales montant doit etre compris entre 0 et 6."; return; }
+        if (nombreDecimalesQuantite < 0 || nombreDecimalesQuantite > 6)
+        { erreur = "Le nombre de decimales quantite doit etre compris entre 0 et 6."; return; }
+        if (motDePasse.Length < 8)
+        { erreur = "Le mot de passe doit contenir au moins 8 caracteres."; return; }
+        if (motDePasse != confirmation)
+        { erreur = "Les mots de passe ne correspondent pas."; return; }
+        if (!conditions)
+        { erreur = "Veuillez accepter les conditions d'utilisation."; return; }
+
+        chargement = true;
+        btnLabel = "Creation en cours...";
+
+        var dto = new InscriptionRequest
+        {
+            RaisonSociale = raisonSociale,
+            Email = email,
+            NomAdministrateur = nomAdmin,
+            MotDePasse = motDePasse,
+            ConfirmationMotDePasse = confirmation,
+            Devise = devise,
+            SymboleDevise = symboleDevise,
+            NombreDecimalesMontant = nombreDecimalesMontant,
+            NombreDecimalesQuantite = nombreDecimalesQuantite,
+            AccepterConditions = conditions
+        };
+
+        var r = await Api.InscrireAsync(dto);
+        chargement = false;
+        btnLabel = "Creer mon espace gratuitement";
+
+        if (r?.Succes == true)
+        {
+            tenantCode = r.TenantCode;
+            emailEnvoye = r.EmailEnvoye;
+            succes = true;
+        }
+        else
+        {
+            erreur = r?.Message ?? "Une erreur est survenue.";
+        }
+    }
+
+    private void IrVersLogin() => Nav.NavigateTo("/login");
+}

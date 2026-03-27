@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Force fresh reference assembly generation on every build -->
+    <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
+    <Deterministic>true</Deterministic>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+  </PropertyGroup>
+</Project>

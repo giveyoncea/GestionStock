@@ -1,0 +1,217 @@
+@page "/familles"
+@attribute [Authorize]
+@inject IApiService Api
+
+<PageTitle>Familles</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Familles d'articles</h1>
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <button class="btn-primary" @onclick="() => OuvrirModal(null, null)">+ Nouvelle famille</button>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Libellé</th>
+                    <th>Famille parente</th>
+                    <th>Description</th>
+                    <th>Couleur</th>
+                    <th>Ordre</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in familles)
+                {
+                    <tr>
+                        <td><code>@f.Code</code></td>
+                        <td class="@(GetLibelleCls(f))">@f.Libelle</td>
+                        <td class="text-muted">@(f.ParentLibelle ?? "—")</td>
+                        <td class="text-muted small">@f.Description</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(f.Couleur))
+                            {
+                                <span class="color-dot" style="background:@f.Couleur"></span>
+                                <code class="small">@f.Couleur</code>
+                            }
+                        </td>
+                        <td class="text-muted">@f.Ordre</td>
+                        <td>
+                            @if (f.EstActif)
+                            {
+                                <span class="badge badge-green">Actif</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-gray">Inactif</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn-action btn-action-blue" @onclick="() => OuvrirModal(f, null)">Modifier</button>
+                                <AuthorizeView Roles="Admin">
+                                    <Authorized>
+                                        <button class="btn-action btn-action-blue" @onclick="() => OuvrirModal(null, f.Id)">+ Sous-famille</button>
+                                        @if (f.EstActif)
+                                        {
+                                            <button class="btn-action btn-action-red" @onclick="() => Desactiver(f.Id)">Désactiver</button>
+                                        }
+                                    </Authorized>
+                                </AuthorizeView>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (!familles.Any())
+    {
+        <div class="empty-state">Aucune famille. Créez-en une.</div>
+    }
+}
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="() => showModal = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@modalTitre</h2>
+                <button class="btn-close" @onclick="() => showModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Code *</label>
+                        <input class="field-input" @bind="fCode" placeholder="FAM-01" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Libellé *</label>
+                        <input class="field-input" @bind="fLibelle" />
+                    </div>
+                    <div class="field-group col-span-3">
+                        <label class="field-label">Description</label>
+                        <input class="field-input" @bind="fDescription" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Famille parente</label>
+                        <select class="field-input" @bind="fParentIdStr">
+                            <option value="">— Aucune (famille racine) —</option>
+                            @foreach (var f in familles.Where(x => x.EstActif && x.Id != editId))
+                            {
+                                <option value="@f.Id">@f.Libelle</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Couleur</label>
+                        <div class="color-picker-row">
+                            <input type="color" class="field-color" @bind="fCouleur" />
+                            <input class="field-input" @bind="fCouleur" placeholder="#6366f1" />
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ordre d'affichage</label>
+                        <input class="field-input" type="number" @bind="fOrdre" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showModal = false">Annuler</button>
+                <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">@savingLabel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<FamilleArticleDto> familles = new();
+    private bool chargement = true, showModal = false, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+    private string savingLabel = "Enregistrer";
+    private string modalTitre = "Nouvelle famille";
+    private Guid? editId;
+
+    private string fCode = "", fLibelle = "", fDescription = "";
+    private string fCouleur = "#6366f1", fParentIdStr = "";
+    private int fOrdre = 0;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        chargement = true;
+        familles = await Api.GetFamillesAsync(false) ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirModal(FamilleArticleDto? f, Guid? parentIdForce)
+    {
+        editId = f?.Id;
+        modalTitre = f == null ? "Nouvelle famille" : "Modifier la famille";
+        fCode = f?.Code ?? "";
+        fLibelle = f?.Libelle ?? "";
+        fDescription = f?.Description ?? "";
+        fCouleur = f?.Couleur ?? "#6366f1";
+        fOrdre = f?.Ordre ?? 0;
+        if (parentIdForce.HasValue)
+            fParentIdStr = parentIdForce.Value.ToString();
+        else
+            fParentIdStr = f?.ParentId?.ToString() ?? "";
+        showModal = true;
+        message = null;
+    }
+
+    private async Task Sauvegarder()
+    {
+        saving = true;
+        savingLabel = "Enregistrement...";
+        Guid? parentId = string.IsNullOrEmpty(fParentIdStr) ? null : Guid.Parse(fParentIdStr);
+        var dto = new FamilleRequest
+        {
+            Code = fCode, Libelle = fLibelle, Description = fDescription,
+            ParentId = parentId, Couleur = fCouleur, Ordre = fOrdre
+        };
+        var r = editId.HasValue
+            ? await Api.ModifierFamilleAsync(editId.Value, dto)
+            : await Api.CreerFamilleAsync(dto);
+        saving = false;
+        savingLabel = "Enregistrer";
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showModal = false; await Load(); }
+    }
+
+    private async Task Desactiver(Guid id)
+    {
+        var r = await Api.DesactiverFamilleAsync(id);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) await Load();
+    }
+
+    private string GetLibelleCls(FamilleArticleDto f)
+    {
+        if (f.ParentId.HasValue) return "text-muted";
+        return "font-bold";
+    }
+}

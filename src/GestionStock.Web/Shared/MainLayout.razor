@@ -1,0 +1,305 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@using Microsoft.AspNetCore.Components.Authorization
+@using Blazored.LocalStorage
+@inject NavigationManager Nav
+@inject ILocalStorageService Storage
+@inject IAuthService Auth
+
+<div class="@LayoutClass">
+
+    <header class="mobile-topbar">
+        <button class="hamburger-btn @(sidebarOpen ? "ham-open" : "")" @onclick="ToggleSidebar" aria-label="Menu">
+            <span class="ham-line"></span>
+            <span class="ham-line"></span>
+            <span class="ham-line"></span>
+        </button>
+        <div class="mobile-logo">GestionStock</div>
+        <div class="mobile-topbar-right">
+            <div class="mobile-avatar">@GetInitials(userNom)</div>
+        </div>
+    </header>
+
+    @if (sidebarOpen)
+    {
+        <div class="sidebar-backdrop" @onclick="CloseSidebar"></div>
+    }
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-mark">GS</div>
+            <div class="logo-text">
+                <span class="logo-title">GestionStock</span>
+                <span class="logo-sub">WMS / SCM</span>
+            </div>
+            <button class="sidebar-close-btn" @onclick="CloseSidebar" aria-label="Fermer le menu">X</button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Module Principal</div>
+            <NavLink class="nav-item" href="" Match="NavLinkMatch.All" @onclick="CloseSidebar">
+                <span class="nav-icon">A</span>
+                <span>Tableau de bord</span>
+            </NavLink>
+                    <NavLink class="nav-item" href="offline" @onclick="CloseSidebar">
+                        <span class="nav-icon">H</span>
+                        <span>Mode hors ligne</span>
+                    </NavLink>
+
+            <button class="nav-accordion-header @(sections["stock"] ? "open" : "")"
+                    @onclick='() => Toggle("stock")'>
+                <span class="nav-section-label-inline">Stock</span>
+                <span class="accordion-arrow">@(sections["stock"] ? "v" : ">")</span>
+            </button>
+            <div class="nav-accordion-body @(sections["stock"] ? "expanded" : "")">
+                <div class="nav-accordion-inner">
+                    <NavLink class="nav-item" href="articles" @onclick="CloseSidebar">
+                        <span class="nav-icon">A</span>
+                        <span>Articles</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="stocks" @onclick="CloseSidebar">
+                        <span class="nav-icon">S</span>
+                        <span>Stocks</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="mouvements" @onclick="CloseSidebar">
+                        <span class="nav-icon">M</span>
+                        <span>Mouvements</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="tracabilite" @onclick="CloseSidebar">
+                        <span class="nav-icon">T</span>
+                        <span>Tracabilité</span>
+                    </NavLink>
+                </div>
+            </div>
+
+            <button class="nav-accordion-header @(sections["ref"] ? "open" : "")"
+                    @onclick='() => Toggle("ref")'>
+                <span class="nav-section-label-inline">Référentiels</span>
+                <span class="accordion-arrow">@(sections["ref"] ? "v" : ">")</span>
+            </button>
+            <div class="nav-accordion-body @(sections["ref"] ? "expanded" : "")">
+                <div class="nav-accordion-inner">
+                    <NavLink class="nav-item" href="depots" @onclick="CloseSidebar">
+                        <span class="nav-icon">D</span>
+                        <span>Dépôts</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="familles" @onclick="CloseSidebar">
+                        <span class="nav-icon">F</span>
+                        <span>Familles</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="categories" @onclick="CloseSidebar">
+                        <span class="nav-icon">C</span>
+                        <span>Catégories</span>
+                    </NavLink>
+                </div>
+            </div>
+
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <button class="nav-accordion-header @(sections["admin"] ? "open" : "")"
+                            @onclick='() => Toggle("admin")'>
+                        <span class="nav-section-label-inline">Administration</span>
+                        <span class="accordion-arrow">@(sections["admin"] ? "v" : ">")</span>
+                    </button>
+                    <div class="nav-accordion-body @(sections["admin"] ? "expanded" : "")">
+                        <div class="nav-accordion-inner">
+                            <NavLink class="nav-item" href="utilisateurs" @onclick="CloseSidebar">
+                                <span class="nav-icon">U</span>
+                                <span>Utilisateurs</span>
+                            </NavLink>
+                            <NavLink class="nav-item" href="roles" @onclick="CloseSidebar">
+                                <span class="nav-icon">R</span>
+                                <span>Rôles</span>
+                            </NavLink>
+                            <NavLink class="nav-item" href="parametres" @onclick="CloseSidebar">
+                                <span class="nav-icon">P</span>
+                                <span>Paramètres</span>
+                            </NavLink>
+                            @if (string.IsNullOrEmpty(userTenant))
+                            {
+                                <NavLink class="nav-item" href="admin/tenants" @onclick="CloseSidebar">
+                                    <span class="nav-icon">T</span>
+                                    <span>Comptes clients</span>
+                                </NavLink>
+                            }
+                        </div>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
+
+            <div class="nav-section-label">Module Additionnel</div>
+            <button class="nav-accordion-header @(sections["commercial"] ? "open" : "")"
+                    @onclick='() => Toggle("commercial")'>
+                <span class="nav-section-label-inline">Commercial</span>
+                <span class="accordion-arrow">@(sections["commercial"] ? "v" : ">")</span>
+            </button>
+            <div class="nav-accordion-body @(sections["commercial"] ? "expanded" : "")">
+                <div class="nav-accordion-inner">
+                    <NavLink class="nav-item" href="commercial" @onclick="CloseSidebar">
+                        <span class="nav-icon">C</span>
+                        <span>Espace commercial</span>
+                    </NavLink>
+                    <NavLink class="nav-item" href="commercial/reglements" @onclick="CloseSidebar">
+                        <span class="nav-icon">R</span>
+                        <span>Règlements & acomptes</span>
+                    </NavLink>
+                </div>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user-card">
+                        <div class="user-avatar">@GetInitials(userNom)</div>
+                        <div class="user-details">
+                            <span class="user-name">@(string.IsNullOrEmpty(userNom) ? "Utilisateur" : userNom)</span>
+                            <span class="user-email">@userEmail</span>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(userRole))
+                    {
+                        <div class="user-role-line">
+                            <span class="user-role-badge">@userRole</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(userTenant))
+                    {
+                        <div class="tenant-info-block">
+                            <div class="tenant-info-row">
+                                <span class="tenant-info-label">Code</span>
+                                <code class="tenant-info-value">@userTenant</code>
+                            </div>
+                            @if (!string.IsNullOrEmpty(tenantDb))
+                            {
+                                <div class="tenant-info-row">
+                                    <span class="tenant-info-label">Base</span>
+                                    <code class="tenant-info-value">@tenantDb</code>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(tenantCreatedAt))
+                            {
+                                <div class="tenant-info-row">
+                                    <span class="tenant-info-label">Créé le</span>
+                                    <span class="tenant-info-value">@tenantCreatedAt</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    <button class="btn-deconnexion" @onclick="Deconnecter">
+                        <span class="deconnexion-icon">O</span>
+                        <span class="deconnexion-label">Déconnexion</span>
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-wrapper">
+            @Body
+        </div>
+    </main>
+
+    <nav class="bottom-nav">
+        <NavLink class="bottom-nav-item" href="" Match="NavLinkMatch.All" @onclick="CloseSidebar">
+            <span class="bottom-nav-icon">A</span>
+            <span class="bottom-nav-label">Accueil</span>
+        </NavLink>
+        <NavLink class="bottom-nav-item" href="articles" @onclick="CloseSidebar">
+            <span class="bottom-nav-icon">A</span>
+            <span class="bottom-nav-label">Articles</span>
+        </NavLink>
+        <NavLink class="bottom-nav-item" href="offline" @onclick="CloseSidebar">
+            <span class="bottom-nav-icon">H</span>
+            <span class="bottom-nav-label">Hors ligne</span>
+        </NavLink>
+        <NavLink class="bottom-nav-item" href="commercial" @onclick="CloseSidebar">
+            <span class="bottom-nav-icon">C</span>
+            <span class="bottom-nav-label">Commercial</span>
+        </NavLink>
+        <NavLink class="bottom-nav-item" href="parametres" @onclick="CloseSidebar">
+            <span class="bottom-nav-icon">P</span>
+            <span class="bottom-nav-label">Paramètres</span>
+        </NavLink>
+        <button class="bottom-nav-item bottom-nav-more" @onclick="ToggleSidebar">
+            <span class="bottom-nav-icon">+</span>
+            <span class="bottom-nav-label">Menu</span>
+        </button>
+    </nav>
+
+</div>
+
+@code {
+    private string userNom = "";
+    private string userEmail = "";
+    private string userRole = "";
+    private string userTenant = "";
+    private string tenantDb = "";
+    private string tenantCreatedAt = "";
+
+    private Dictionary<string, bool> sections = new()
+    {
+        ["stock"] = false,
+        ["ref"] = false,
+        ["admin"] = false,
+        ["commercial"] = true,
+    };
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += HandleLocationChanged;
+    }
+
+    private void Toggle(string key)
+    {
+        if (sections.ContainsKey(key))
+            sections[key] = !sections[key];
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            userNom = await Storage.GetItemAsStringAsync("userNom") ?? "";
+            userEmail = await Storage.GetItemAsStringAsync("userEmail") ?? "";
+            userRole = await Storage.GetItemAsStringAsync("userRole") ?? "";
+            userTenant = await Storage.GetItemAsStringAsync("tenantCode") ?? "";
+            tenantDb = await Storage.GetItemAsStringAsync("tenantDb") ?? "";
+            tenantCreatedAt = await Storage.GetItemAsStringAsync("tenantCreatedAt") ?? "";
+            StateHasChanged();
+        }
+    }
+
+    private async Task Deconnecter()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+
+    private bool sidebarOpen = false;
+    private string LayoutClass => sidebarOpen ? "layout sidebar-open" : "layout";
+    private void ToggleSidebar() => sidebarOpen = !sidebarOpen;
+    private void CloseSidebar() => sidebarOpen = false;
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        sidebarOpen = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return ("" + parts[0][0] + parts[parts.Length - 1][0]).ToUpperInvariant();
+        return name.Substring(0, Math.Min(2, name.Length)).ToUpperInvariant();
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= HandleLocationChanged;
+    }
+}
+

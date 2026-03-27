@@ -1,0 +1,188 @@
+@page "/fournisseurs"
+@attribute [Authorize]
+@inject IApiService Api
+
+<PageTitle>Fournisseurs</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Fournisseurs</h1>
+    <button class="btn-primary" @onclick="() => showModal = true">+ Nouveau fournisseur</button>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+<div class="toolbar">
+    <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" type="text" placeholder="Raison sociale, code…"
+               @bind="recherche" @bind:event="oninput" @onkeyup="OnKey" />
+    </div>
+    <div class="toolbar-right">
+        <span class="record-count">@total fournisseur(s)</span>
+    </div>
+</div>
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Raison sociale</th>
+                    <th>Email</th>
+                    <th>Téléphone</th>
+                    <th>Ville</th>
+                    <th class="text-right">Délai (j)</th>
+                    <th class="text-right">Commandes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in fournisseurs)
+                {
+                    <tr>
+                        <td><code>@f.Code</code></td>
+                        <td class="font-bold">@f.RaisonSociale</td>
+                        <td class="text-muted">@f.Email</td>
+                        <td class="text-muted">@f.Telephone</td>
+                        <td class="text-muted">@f.Ville</td>
+                        <td class="text-right mono">@f.DelaiLivraisonJours j</td>
+                        <td class="text-right">@f.NombreCommandes</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination">
+        <button class="btn-page" disabled="@(currentPage <= 1)" @onclick="() => ChangePage(currentPage - 1)">←</button>
+        <span class="page-info">Page @currentPage / @totalPages</span>
+        <button class="btn-page" disabled="@(currentPage >= totalPages)" @onclick="() => ChangePage(currentPage + 1)">→</button>
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="() => showModal = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>Nouveau fournisseur</h2>
+                <button class="btn-close" @onclick="() => showModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Code *</label>
+                        <input class="field-input" @bind="fCode" placeholder="FOUR-01" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale *</label>
+                        <input class="field-input" @bind="fRaisonSociale" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">SIRET</label>
+                        <input class="field-input" @bind="fSiret" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email *</label>
+                        <input class="field-input" type="email" @bind="fEmail" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Téléphone *</label>
+                        <input class="field-input" @bind="fTelephone" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Adresse</label>
+                        <input class="field-input" @bind="fAdresse" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="fVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Code postal</label>
+                        <input class="field-input" @bind="fCodePostal" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Pays</label>
+                        <input class="field-input" @bind="fPays" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Délai livraison (j)</label>
+                        <input class="field-input" type="number" @bind="fDelai" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showModal = false">Annuler</button>
+                <button class="btn-primary" @onclick="Creer" disabled="@saving">@savingLabel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<FournisseurDto> fournisseurs = new();
+    private string recherche = "";
+    private int currentPage = 1, totalPages = 1, total = 0;
+    private bool chargement = true, showModal = false, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+    private string savingLabel = "Créer";
+
+    private string fCode = "", fRaisonSociale = "", fSiret = "";
+    private string fEmail = "", fTelephone = "", fAdresse = "";
+    private string fVille = "", fCodePostal = "", fPays = "France";
+    private int fDelai = 7;
+
+    private System.Threading.Timer? _timer;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private void OnKey(KeyboardEventArgs _)
+    {
+        _timer?.Dispose();
+        _timer = new System.Threading.Timer(async _ =>
+        {
+            currentPage = 1;
+            await InvokeAsync(async () => { await Load(); StateHasChanged(); });
+        }, null, 400, System.Threading.Timeout.Infinite);
+    }
+
+    private async Task Load()
+    {
+        chargement = true;
+        var r = await Api.GetFournisseursAsync(currentPage, 20, recherche);
+        fournisseurs = r?.Items.ToList() ?? new();
+        total = r?.TotalCount ?? 0;
+        totalPages = r?.TotalPages ?? 1;
+        chargement = false;
+    }
+
+    private async Task ChangePage(int p) { currentPage = p; await Load(); }
+
+    private async Task Creer()
+    {
+        saving = true;
+        savingLabel = "Enregistrement…";
+        var dto = new CreerFournisseurDto(fCode, fRaisonSociale, fSiret,
+            fEmail, fTelephone, fAdresse, fVille, fCodePostal, fPays, fDelai);
+        var r = await Api.CreerFournisseurAsync(dto);
+        saving = false;
+        savingLabel = "Créer";
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true)
+        {
+            showModal = false;
+            fCode = ""; fRaisonSociale = "";
+            await Load();
+        }
+    }
+}

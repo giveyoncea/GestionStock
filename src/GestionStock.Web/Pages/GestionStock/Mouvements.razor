@@ -1,0 +1,162 @@
+@page "/mouvements"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+
+<PageTitle>Mouvements – GestionStock</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Historique des mouvements</h1>
+</div>
+
+<div class="toolbar">
+    <div class="toolbar-filters">
+        <input class="field-input" type="date" @bind="du" />
+        <span class="filter-sep">→</span>
+        <input class="field-input" type="date" @bind="au" />
+        <select class="field-input" @bind="typeFiltre">
+            <option value="0">Tous les types</option>
+            <option value="1">Entrée</option>
+            <option value="2">Sortie</option>
+            <option value="3">Transfert</option>
+            <option value="4">Ajustement</option>
+            <option value="5">Retour</option>
+            <option value="6">Perte</option>
+            <option value="7">Production</option>
+        </select>
+        <button class="btn-secondary" @onclick="Load">Filtrer</button>
+    </div>
+    <div class="toolbar-right">
+        <span class="record-count">@MouvementsFiltres.Count() mouvement(s)</span>
+    </div>
+</div>
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Article</th>
+                    <th>Type</th>
+                    <th>Emplacement</th>
+                    <th class="text-right">Quantité</th>
+                    <th class="text-right">Valeur</th>
+                    <th>Référence / Motif</th>
+                    <th>Opérateur</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var m in MouvementsFiltres)
+                {
+                    var signe = GetSigne(m.TypeMouvement);
+                    var qtyCls = GetQtyCls(m.TypeMouvement);
+                    <tr>
+                        <td class="text-muted small">@m.DateMouvement.ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>
+                            <div class="cell-main">@m.ArticleDesignation</div>
+                            <div class="cell-sub"><code>@m.ArticleCode</code></div>
+                        </td>
+                        <td>
+                            <span class="badge @(GetMvtCls(m.TypeMouvement))">
+                                @GetMvtIcon(m.TypeMouvement) @m.TypeMouvementLibelle
+                            </span>
+                        </td>
+                        <td class="text-muted small">
+                            @m.EmplacementSource
+                            @if (!string.IsNullOrEmpty(m.EmplacementDestination))
+                            {
+                                <span> → @m.EmplacementDestination</span>
+                            }
+                        </td>
+                        <td class="text-right @qtyCls">@signe@m.Quantite</td>
+                        <td class="text-right mono small">@Montant(m.ValeurTotale)</td>
+                        <td class="text-muted small">@(m.Reference ?? m.Motif)</td>
+                        <td class="text-muted small">@m.CreatedBy</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (!mouvements.Any())
+    {
+        <div class="empty-state">Aucun mouvement sur cette période.</div>
+    }
+}
+
+@code {
+    private List<MouvementStockDto> mouvements = new();
+    private bool chargement = true;
+    private DateTime du = DateTime.Today.AddDays(-30);
+    private DateTime au = DateTime.Today;
+    private int typeFiltre = 0;
+
+    private IEnumerable<MouvementStockDto> MouvementsFiltres =>
+        typeFiltre == 0 ? mouvements : mouvements.Where(m => m.TypeMouvement == typeFiltre);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        chargement = true;
+        var r = await Api.GetMouvementsAsync(null, du, au.AddDays(1));
+        mouvements = r?.ToList() ?? new();
+        chargement = false;
+    }
+
+    private string GetSigne(int type) => type switch
+    {
+        1 => "+", // Entrée
+        2 => "-", // Sortie
+        3 => "⇄", // Transfert
+        4 => "≈", // Ajustement
+        5 => "+", // Retour
+        6 => "-", // Perte
+        7 => "+", // Production
+        _ => ""
+    };
+
+    private string GetQtyCls(int type) => type switch
+    {
+        2 or 6 => "text-danger mono",
+        1 or 5 or 7 => "text-success mono",
+        3 => "text-blue mono",
+        4 => "text-warn mono",
+        _ => "mono"
+    };
+
+    private string GetMvtCls(int type) => type switch
+    {
+        1 => "badge-green",
+        2 => "badge-red",
+        3 => "badge-blue",
+        4 => "badge-amber",
+        5 => "badge-teal",
+        6 => "badge-red",
+        7 => "badge-green",
+        _ => "badge-gray"
+    };
+
+    private string GetMvtIcon(int type) => type switch
+    {
+        1 => "↓",
+        2 => "↑",
+        3 => "⇄",
+        4 => "≈",
+        5 => "↩",
+        6 => "✕",
+        7 => "⚙",
+        _ => ""
+    };
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}

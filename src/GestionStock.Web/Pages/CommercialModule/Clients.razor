@@ -1,0 +1,225 @@
+﻿@page "/clients"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+
+<PageTitle>Clients â€“ GestionStock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Clients</h1>
+        <p class="page-date">Tiers vente â€” @clients.Count client(s)</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau client</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message)) { <div class="@msgCls">@message</div> }
+
+<div class="toolbar">
+    <div class="search-box">
+        <span class="search-icon">ðŸ”</span>
+        <input class="search-input" type="text" placeholder="Nom, code, emailâ€¦"
+               @bind="recherche" @bind:event="oninput" />
+    </div>
+    <div class="toolbar-right">
+        <span class="record-count">@ClientsFiltres.Count() client(s)</span>
+    </div>
+</div>
+
+@if (chargement) { <div class="loading-state"><div class="spinner-lg"></div></div> }
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr>
+                <th>Code</th><th>Client</th><th>Type</th>
+                <th>Email</th><th>Ville</th>
+                <th class="text-right">Remise</th><th class="text-right">DÃ©lai</th>
+                <th class="text-right">Encours</th><th></th>
+            </tr></thead>
+            <tbody>
+            @foreach (var c in ClientsFiltres)
+            {
+                <tr class="@(!c.EstActif ? "row-inactive" : "")">
+                    <td><code>@c.Code</code></td>
+                    <td>
+                        <div class="cell-main">@c.RaisonSociale</div>
+                    </td>
+                    <td><span class="badge @(c.TypeClient==1?"badge-gray":"badge-blue")">@(c.TypeClient==1?"Particulier":"Pro")</span></td>
+                    <td class="small text-muted">@c.Email</td>
+                    <td class="small text-muted">@c.Ville</td>
+                    <td class="text-right mono">@c.TauxRemise.ToString("N1") %</td>
+                    <td class="text-right mono">@c.DelaiPaiementJours j</td>
+                    <td class="text-right mono @(c.Encours>0?"text-warn":"")">@Montant(c.Encours)</td>
+                    <td class="actions-cell">
+                        <div class="row-actions">
+                            <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick="() => OuvrirEdition(c)">Modifier</button>
+                            <button class="btn-row-action btn-row-action--soft" title="Documents" @onclick="() => VoirDocuments(c)">Documents</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    @if (!clients.Any()) { <div class="empty-state">Aucun client. CrÃ©ez votre premier client.</div> }
+}
+
+@* â”€â”€â”€ MODAL CRÃ‰ATION / Ã‰DITION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="() => showModal = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@(clientEdite==null ? "+ Nouveau client" : "âœŽ " + clientEdite.RaisonSociale)</h2>
+                <button class="btn-close" @onclick="() => showModal = false">âœ•</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Raison sociale / Nom *</label>
+                        <input class="field-input" @bind="fRs" placeholder="Nom du client" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Type</label>
+                        <select class="field-input" @bind="fType">
+                            <option value="1">Particulier</option>
+                            <option value="2">Professionnel</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Email</label>
+                        <input class="field-input" type="email" @bind="fEmail" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">TÃ©lÃ©phone</label>
+                        <input class="field-input" @bind="fTel" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ville</label>
+                        <input class="field-input" @bind="fVille" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Code postal</label>
+                        <input class="field-input" @bind="fCp" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Pays</label>
+                        <input class="field-input" @bind="fPays" />
+                    </div>
+                    @if (fType == 2)
+                    {
+                        <div class="field-group">
+                            <label class="field-label">NÂ° TVA</label>
+                            <input class="field-input" @bind="fTva" placeholder="FR00000000000" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">SIRET</label>
+                            <input class="field-input" @bind="fSiret" />
+                        </div>
+                    }
+                    <div class="field-group">
+                        <label class="field-label">Remise (%)</label>
+                        <input class="field-input" type="number" step="0.01" @bind="fRemise" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">DÃ©lai paiement (j)</label>
+                        <input class="field-input" type="number" @bind="fDelai" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">@($"Plafond credit ({Devise.Symbol})")</label>
+                        <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fPlafond" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Notes</label>
+                        <textarea class="field-input" rows="2" @bind="fNotes"></textarea>
+                    </div>
+                    @if (clientEdite != null)
+                    {
+                        <div class="field-group col-span-2">
+                            <label class="check-label">
+                                <input type="checkbox" @bind="fActif" /> Compte actif
+                            </label>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showModal = false">Annuler</button>
+                <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">
+                    @(saving ? "Enregistrementâ€¦" : clientEdite==null ? "CrÃ©er" : "Modifier")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ClientDto> clients = new();
+    private bool chargement = true, saving = false;
+    private string? message; private string msgCls = "alert-success";
+    private string recherche = "";
+    private IEnumerable<ClientDto> ClientsFiltres => string.IsNullOrWhiteSpace(recherche) ? clients
+        : clients.Where(c => c.RaisonSociale.Contains(recherche, StringComparison.OrdinalIgnoreCase)
+            || c.Code.Contains(recherche, StringComparison.OrdinalIgnoreCase)
+            || (c.Email??string.Empty).Contains(recherche, StringComparison.OrdinalIgnoreCase));
+
+    private bool showModal = false;
+    private ClientDto? clientEdite;
+    private string fRs="", fEmail="", fTel="", fVille="", fCp="", fPays="France";
+    private string fTva="", fSiret="", fNotes="";
+    private int fType=2, fDelai=30;
+    private decimal fRemise=0, fPlafond=0;
+    private bool fActif=true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        chargement = true;
+        clients = await Api.GetClientsAsync() ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirCreation()
+    {
+        clientEdite=null; fRs=fEmail=fTel=fVille=fCp=fTva=fSiret=fNotes=""; fPays="France";
+        fType=2; fDelai=30; fRemise=0; fPlafond=0; fActif=true;
+        showModal=true;
+    }
+
+    private void OuvrirEdition(ClientDto c)
+    {
+        clientEdite=c; fRs=c.RaisonSociale; fEmail=c.Email??"";
+        fTel=c.Telephone??""; fVille=c.Ville??""; fType=c.TypeClient;
+        fDelai=c.DelaiPaiementJours; fRemise=c.TauxRemise; fPlafond=c.PlafondCredit;
+        fActif=c.EstActif; fPays="France"; fCp=fTva=fSiret=fNotes="";
+        showModal=true;
+    }
+
+    private void VoirDocuments(ClientDto c)
+    {
+        // Navigation vers ventes filtrÃ©es par client
+        message = $"Affichage des documents de {c.RaisonSociale} â€” accÃ©dez Ã  Ventes pour voir ses documents.";
+        msgCls = "alert-success";
+    }
+
+    private async Task Sauvegarder()
+    {
+        if (string.IsNullOrWhiteSpace(fRs)) { message="Raison sociale obligatoire."; msgCls="alert-error"; return; }
+        saving=true;
+        var dto = new ClientRequest { RaisonSociale=fRs, TypeClient=fType, Email=fEmail, Telephone=fTel,
+            Ville=fVille, CodePostal=fCp, Pays=fPays, NumeroTVA=fTva, Siret=fSiret,
+            DelaiPaiementJours=fDelai, TauxRemise=fRemise, PlafondCredit=fPlafond,
+            Notes=fNotes, EstActif=fActif };
+        ResultDto? r;
+        if (clientEdite==null) r = await Api.CreerClientAsync(dto);
+        else r = await Api.ModifierClientAsync(clientEdite.Id, dto);
+        saving=false; msgCls=r?.Succes==true?"alert-success":"alert-error"; message=r?.Message;
+        if (r?.Succes==true) { showModal=false; clients=await Api.GetClientsAsync()??new(); }
+    }
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}
+

@@ -1,0 +1,202 @@
+@page "/categories"
+@attribute [Authorize(Roles = "Admin")]
+@inject IApiService Api
+
+<PageTitle>Catégories – GestionStock</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Catégories d'articles</h1>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouvelle catégorie</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Libellé</th>
+                    <th>Description</th>
+                    <th>Couleur</th>
+                    <th class="text-right">Ordre</th>
+                    <th>Statut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var cat in categories)
+                {
+                    <tr>
+                        <td><code>@cat.Code</code></td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(cat.Couleur))
+                            {
+                                <span class="color-dot" style="background:@cat.Couleur"></span>
+                            }
+                            <strong>@cat.Libelle</strong>
+                        </td>
+                        <td class="text-muted small">@cat.Description</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(cat.Couleur))
+                            {
+                                <span class="couleur-pill" style="background:@(cat.Couleur + "33");color:@cat.Couleur;border:1px solid @(cat.Couleur + "66")">@cat.Couleur</span>
+                            }
+                        </td>
+                        <td class="text-right mono">@cat.Ordre</td>
+                        <td>
+                            <span class="badge @(cat.EstActif ? "badge-green" : "badge-red")">
+                                @(cat.EstActif ? "Active" : "Inactive")
+                            </span>
+                        </td>
+                        <td class="actions-cell">
+                            <button class="btn-icon" title="Modifier" @onclick="() => OuvrirModification(cat)">✎</button>
+                            @if (cat.EstActif)
+                            {
+                                <button class="btn-icon btn-icon-danger" title="Désactiver" @onclick="() => Desactiver(cat.Id)">✕</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (!categories.Any())
+    {
+        <div class="empty-state">Aucune catégorie. Créez-en une pour commencer.</div>
+    }
+}
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="() => showModal = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@(editId == null ? "Nouvelle catégorie" : "Modifier la catégorie")</h2>
+                <button class="btn-close" @onclick="() => showModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group">
+                        <label class="field-label">Code * <span class="field-hint">(ex: ALIM, ELEC)</span></label>
+                        <input class="field-input" @bind="fCode" placeholder="ALIM"
+                               style="text-transform:uppercase" disabled="@(editId != null)" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Ordre d'affichage</label>
+                        <input class="field-input" type="number" min="0" @bind="fOrdre" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Libellé *</label>
+                        <input class="field-input" @bind="fLibelle" placeholder="Alimentation" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Description</label>
+                        <input class="field-input" @bind="fDescription" placeholder="Description optionnelle" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Couleur <span class="field-hint">(code hex, ex: #e74c3c)</span></label>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <input class="field-input" @bind="fCouleur" placeholder="#3498db" style="flex:1" />
+                            @if (!string.IsNullOrEmpty(fCouleur))
+                            {
+                                <span style="width:28px;height:28px;border-radius:6px;background:@fCouleur;border:1px solid rgba(0,0,0,.1);flex-shrink:0"></span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showModal = false">Annuler</button>
+                <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">
+                    @(saving ? "Enregistrement…" : editId == null ? "Créer" : "Modifier")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<CategorieDto> categories = new();
+    private bool chargement = true, showModal = false, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private Guid? editId;
+    private string fCode = "", fLibelle = "", fDescription = "", fCouleur = "";
+    private int fOrdre = 0;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        chargement = true;
+        var r = await Api.GetCategoriesAsync(false);
+        categories = r ?? new();
+        chargement = false;
+    }
+
+    private void OuvrirCreation()
+    {
+        editId = null;
+        fCode = fLibelle = fDescription = fCouleur = "";
+        fOrdre = categories.Count > 0 ? categories.Max(c => c.Ordre) + 10 : 10;
+        showModal = true;
+    }
+
+    private void OuvrirModification(CategorieDto cat)
+    {
+        editId = cat.Id;
+        fCode = cat.Code;
+        fLibelle = cat.Libelle;
+        fDescription = cat.Description ?? "";
+        fCouleur = cat.Couleur ?? "";
+        fOrdre = cat.Ordre;
+        showModal = true;
+    }
+
+    private async Task Sauvegarder()
+    {
+        if (string.IsNullOrWhiteSpace(fLibelle))
+        {
+            message = "Le libellé est obligatoire.";
+            msgCls = "alert-error";
+            return;
+        }
+        saving = true;
+        var dto = new CategorieRequest
+        {
+            Code = fCode.Trim().ToUpperInvariant(),
+            Libelle = fLibelle.Trim(),
+            Description = string.IsNullOrWhiteSpace(fDescription) ? null : fDescription,
+            Couleur = string.IsNullOrWhiteSpace(fCouleur) ? null : fCouleur,
+            Ordre = fOrdre
+        };
+        ResultDto? r = editId == null
+            ? await Api.CreerCategorieAsync(dto)
+            : await Api.ModifierCategorieAsync(editId.Value, dto);
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showModal = false; await Load(); }
+    }
+
+    private async Task Desactiver(Guid id)
+    {
+        var r = await Api.DesactiverCategorieAsync(id);
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) await Load();
+    }
+}

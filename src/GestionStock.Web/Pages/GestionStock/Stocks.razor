@@ -1,0 +1,558 @@
+@page "/stocks"
+@attribute [Authorize]
+@inject IApiService Api
+@inject NavigationManager Nav
+@inject ICurrencyService Devise
+
+<PageTitle>Stocks – GestionStock</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Stocks</h1>
+    <div class="header-actions">
+        @if (commercialActif)
+        {
+            <button class="btn-commercial" @onclick="AllerCommercial" title="Module Gestion Commerciale">
+                🏪 Gestion Commerciale
+            </button>
+        }
+        <button class="btn-secondary"  @onclick="OuvrirSortie">↑ Sortie</button>
+        <button class="btn-secondary"  @onclick="OuvrirTransfert">⇄ Transfert</button>
+        <button class="btn-outline"    @onclick="OuvrirInventaire">📋 Inventaire</button>
+        <button class="btn-primary"    @onclick="OuvrirEntree">↓ Entrée</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="@msgCls">@message</div>
+}
+
+<div class="toolbar">
+    <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" type="text" placeholder="Article, code…"
+               @bind="recherche" @bind:event="oninput" />
+    </div>
+    <div class="toolbar-right">
+        <span class="record-count">@stocks.Count article(s)</span>
+    </div>
+</div>
+
+@if (chargement)
+{
+    <div class="loading-state"><div class="spinner-lg"></div></div>
+}
+else
+{
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Désignation</th>
+                    <th class="text-right">Total</th>
+                    <th class="text-right">Disponible</th>
+                    <th class="text-right">Réservé</th>
+                    <th class="text-right">Valeur</th>
+                    <th>État</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in StocksFiltres)
+                {
+                    var rowCls = s.EstEnRupture ? "row-danger" : s.EstEnAlerte ? "row-warn" : "";
+                    var qtyCls = s.EstEnRupture ? "text-danger" : s.EstEnAlerte ? "text-warn" : "";
+                    <tr class="@rowCls" @onclick="() => SelectionnerArticle(s)">
+                        <td><code>@s.ArticleCode</code></td>
+                        <td>@s.ArticleDesignation</td>
+                        <td class="text-right mono @qtyCls">@s.QuantiteTotale</td>
+                        <td class="text-right mono">@s.QuantiteDisponible</td>
+                        <td class="text-right mono text-muted">@s.QuantiteReservee</td>
+                        <td class="text-right mono">@Montant(s.ValeurStock)</td>
+                        <td>
+                            @if (s.EstEnRupture)
+                            {
+                                <span class="badge badge-red">Rupture</span>
+                            }
+                            else if (s.EstEnAlerte)
+                            {
+                                <span class="badge badge-amber">Alerte</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-green">OK</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@* ─── MODAL ENTRÉE / SORTIE ──────────────────────────────────────────────── *@
+@if (showEntreeSortie)
+{
+    <div class="modal-overlay" @onclick="() => showEntreeSortie = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>@titreModal</h2>
+                <button class="btn-close" @onclick="() => showEntreeSortie = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Article *</label>
+                        <select class="field-input" @bind="selectedArticleId">
+                            <option value="00000000-0000-0000-0000-000000000000">— Sélectionner —</option>
+                            @foreach (var s in stocks)
+                            {
+                                <option value="@s.ArticleId">[@s.ArticleCode] @s.ArticleDesignation</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Emplacement *</label>
+                        <select class="field-input" @bind="selectedEmplacementId">
+                            <option value="00000000-0000-0000-0000-000000000000">— Sélectionner —</option>
+                            @foreach (var e in emplacements)
+                            {
+                                <option value="@e.Id">[@e.Zone] @e.Code</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Quantité *</label>
+                        <input class="field-input" type="number" min="1" @bind="quantite" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">@($"Prix unitaire ({Devise.Symbol})")</label>
+                        <input class="field-input" type="number" step="@Devise.AmountStep" @bind="prixUnitaire" />
+                    </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Référence *</label>
+                        <input class="field-input" @bind="reference" placeholder="BL-2024-001" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">N° Lot</label>
+                        <input class="field-input" @bind="numeroLot" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Motif</label>
+                        <input class="field-input" @bind="motif" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showEntreeSortie = false">Annuler</button>
+                <button class="btn-primary" @onclick="EnregistrerEntreeSortie" disabled="@saving">
+                    @(saving ? "En cours…" : "Enregistrer")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ─── MODAL TRANSFERT ────────────────────────────────────────────────────── *@
+@if (showTransfert)
+{
+    <div class="modal-overlay" @onclick="() => showTransfert = false">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>⇄ Transfert entre emplacements</h2>
+                <button class="btn-close" @onclick="() => showTransfert = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Article *</label>
+                        <select class="field-input" @bind="selectedArticleId">
+                            <option value="00000000-0000-0000-0000-000000000000">— Sélectionner —</option>
+                            @foreach (var s in stocks)
+                            {
+                                <option value="@s.ArticleId">[@s.ArticleCode] @s.ArticleDesignation</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Emplacement source *</label>
+                        <select class="field-input" @bind="emplacementSourceId">
+                            <option value="00000000-0000-0000-0000-000000000000">— Source —</option>
+                            @foreach (var e in emplacements)
+                            {
+                                <option value="@e.Id">[@e.Zone] @e.Code</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Emplacement destination *</label>
+                        <select class="field-input" @bind="emplacementDestId">
+                            <option value="00000000-0000-0000-0000-000000000000">— Destination —</option>
+                            @foreach (var e in emplacements)
+                            {
+                                <option value="@e.Id">[@e.Zone] @e.Code</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Quantité *</label>
+                        <input class="field-input" type="number" min="1" @bind="quantite" />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">N° Lot</label>
+                        <input class="field-input" @bind="numeroLot" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="() => showTransfert = false">Annuler</button>
+                <button class="btn-primary" @onclick="EnregistrerTransfert" disabled="@saving">
+                    @(saving ? "En cours…" : "Transférer")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ─── MODAL INVENTAIRE ───────────────────────────────────────────────────── *@
+@if (showInventaire)
+{
+    <div class="modal-overlay" @onclick="() => showInventaire = false">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h2>📋 Saisie d'inventaire</h2>
+                <button class="btn-close" @onclick="() => showInventaire = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="inv-intro">Saisissez les quantités réellement comptées. Seules les lignes modifiées seront ajustées.</p>
+
+                <div class="inv-filters">
+                    <input class="field-input" type="text" placeholder="Filtrer par article…"
+                           @bind="rechercheInv" @bind:event="oninput" />
+                    <select class="field-input" @bind="emplacementInvId">
+                        <option value="00000000-0000-0000-0000-000000000000">Tous les emplacements</option>
+                        @foreach (var e in emplacements)
+                        {
+                            <option value="@e.Id">[@e.Zone] @e.Code</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="inv-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Article</th>
+                                <th>Emplacement</th>
+                                <th class="text-right">Théorique</th>
+                                <th class="text-right" style="width:120px">Compté *</th>
+                                <th class="text-right">Écart</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ligne in LignesInvFiltrees)
+                            {
+                                var ecartCls = ligne.Ecart > 0 ? "text-success" : ligne.Ecart < 0 ? "text-danger" : "text-muted";
+                                <tr class="@(ligne.Modifiee ? "row-inv-modified" : "")">
+                                    <td>
+                                        <div class="cell-main">@ligne.ArticleDesignation</div>
+                                        <div class="cell-sub"><code>@ligne.ArticleCode</code></div>
+                                    </td>
+                                    <td class="text-muted">@ligne.EmplacementCode</td>
+                                    <td class="text-right mono">@ligne.QuantiteTheorique</td>
+                                    <td class="text-right">
+                                        <input class="field-input inv-qty-input"
+                                               type="number" min="0"
+                                               value="@ligne.QuantiteComptee"
+                                               @onchange="(e) => OnQuantiteChange(ligne, e)" />
+                                    </td>
+                                    <td class="text-right mono @ecartCls">
+                                        @(ligne.Ecart >= 0 ? "+" : "")@ligne.Ecart
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (!string.IsNullOrEmpty(msgInventaire))
+                {
+                    <div class="@msgInventaireCls" style="margin-top:12px">@msgInventaire</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <span class="inv-summary">
+                    @lignesInventaire.Count(l => l.Modifiee) ligne(s) modifiée(s)
+                </span>
+                <button class="btn-secondary" @onclick="() => showInventaire = false">Fermer</button>
+                <button class="btn-primary" @onclick="ValiderInventaire" disabled="@(saving || !lignesInventaire.Any(l => l.Modifiee))">
+                    @(saving ? "Validation…" : "Valider les ajustements")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<StockResumeDto> stocks = new();
+    private List<EmplacementDto> emplacements = new();
+    private string recherche = "";
+    private bool chargement = true, saving = false;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    // Entrée / Sortie
+    private bool showEntreeSortie = false;
+    private string modeAction = "entree";
+    private string titreModal = "↓ Entrée en stock";
+
+    // Transfert
+    private bool showTransfert = false;
+    private Guid emplacementSourceId = Guid.Empty;
+    private Guid emplacementDestId = Guid.Empty;
+
+    // Inventaire
+    private bool showInventaire = false;
+    private List<LigneInventaireSaisie> lignesInventaire = new();
+    private string rechercheInv = "";
+    private Guid emplacementInvId = Guid.Empty;
+    private string? msgInventaire;
+    private string msgInventaireCls = "alert-success";
+
+    // Champs partagés
+    private Guid selectedArticleId = Guid.Empty;
+    private Guid selectedEmplacementId = Guid.Empty;
+    private int quantite = 1;
+    private decimal prixUnitaire = 0;
+    private string reference = "";
+    private string? numeroLot;
+    private string? motif;
+
+    private IEnumerable<StockResumeDto> StocksFiltres =>
+        string.IsNullOrWhiteSpace(recherche)
+            ? stocks
+            : stocks.Where(s =>
+                s.ArticleCode.Contains(recherche, StringComparison.OrdinalIgnoreCase) ||
+                s.ArticleDesignation.Contains(recherche, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<LigneInventaireSaisie> LignesInvFiltrees
+    {
+        get
+        {
+            var q = lignesInventaire.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(rechercheInv))
+                q = q.Where(l => l.ArticleCode.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase) ||
+                                 l.ArticleDesignation.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase));
+            if (emplacementInvId != Guid.Empty)
+                q = q.Where(l => l.EmplacementId == emplacementInvId);
+            return q;
+        }
+    }
+
+    private bool commercialActif = false;
+
+    private void AllerCommercial() => Nav.NavigateTo("/commercial");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await Load();
+        var emp = await Api.GetEmplacementsAsync();
+        emplacements = emp ?? new();
+    }
+
+    private async Task Load()
+    {
+        chargement = true;
+        var r = await Api.GetStocksResumeAsync();
+        stocks = r?.ToList() ?? new();
+        chargement = false;
+    }
+
+    private void SelectionnerArticle(StockResumeDto s)
+    {
+        selectedArticleId = s.ArticleId;
+    }
+
+    private void ResetForm()
+    {
+        selectedArticleId = Guid.Empty;
+        selectedEmplacementId = Guid.Empty;
+        emplacementSourceId = Guid.Empty;
+        emplacementDestId = Guid.Empty;
+        quantite = 1;
+        prixUnitaire = 0;
+        reference = "";
+        numeroLot = null;
+        motif = null;
+        message = null;
+    }
+
+    private void OuvrirEntree()
+    {
+        modeAction = "entree";
+        titreModal = "↓ Entrée en stock";
+        ResetForm();
+        showEntreeSortie = true;
+    }
+
+    private void OuvrirSortie()
+    {
+        modeAction = "sortie";
+        titreModal = "↑ Sortie de stock";
+        ResetForm();
+        showEntreeSortie = true;
+    }
+
+    private void OuvrirTransfert()
+    {
+        ResetForm();
+        showTransfert = true;
+    }
+
+    private void OuvrirInventaire()
+    {
+        // Construire les lignes d'inventaire depuis les stocks actuels
+        lignesInventaire = stocks.SelectMany(s =>
+            emplacements.Select(e => new LigneInventaireSaisie
+            {
+                ArticleId = s.ArticleId,
+                ArticleCode = s.ArticleCode,
+                ArticleDesignation = s.ArticleDesignation,
+                EmplacementId = e.Id,
+                EmplacementCode = $"[{e.Zone}] {e.Code}",
+                QuantiteTheorique = s.QuantiteDisponible,
+                QuantiteComptee = s.QuantiteDisponible,
+                Modifiee = false
+            })
+        ).Take(200).ToList(); // limite affichage initial
+
+        // Simplifier : une ligne par article (tous emplacements confondus)
+        lignesInventaire = stocks.Select(s => new LigneInventaireSaisie
+        {
+            ArticleId = s.ArticleId,
+            ArticleCode = s.ArticleCode,
+            ArticleDesignation = s.ArticleDesignation,
+            EmplacementId = emplacements.FirstOrDefault()?.Id ?? Guid.Empty,
+            EmplacementCode = emplacements.FirstOrDefault()?.Code ?? "–",
+            QuantiteTheorique = s.QuantiteDisponible,
+            QuantiteComptee = s.QuantiteDisponible,
+            Modifiee = false
+        }).ToList();
+
+        rechercheInv = "";
+        emplacementInvId = Guid.Empty;
+        msgInventaire = null;
+        showInventaire = true;
+    }
+
+    private void OnQuantiteChange(LigneInventaireSaisie ligne, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int val))
+        {
+            ligne.QuantiteComptee = val;
+            ligne.Modifiee = val != ligne.QuantiteTheorique;
+        }
+    }
+
+    private async Task ValiderInventaire()
+    {
+        var modifiees = lignesInventaire.Where(l => l.Modifiee && l.EmplacementId != Guid.Empty).ToList();
+        if (!modifiees.Any()) return;
+
+        saving = true;
+        int ok = 0, erreurs = 0;
+
+        foreach (var ligne in modifiees)
+        {
+            var r = await Api.AjustementStockAsync(new AjustementRequest
+            {
+                ArticleId = ligne.ArticleId,
+                EmplacementId = ligne.EmplacementId,
+                QuantiteReelle = ligne.QuantiteComptee,
+                Motif = $"Inventaire manuel – {DateTime.Now:dd/MM/yyyy}"
+            });
+            if (r?.Succes == true)
+            {
+                ligne.QuantiteTheorique = ligne.QuantiteComptee;
+                ligne.Modifiee = false;
+                ok++;
+            }
+            else erreurs++;
+        }
+
+        saving = false;
+        msgInventaireCls = erreurs == 0 ? "alert-success" : "alert-error";
+        msgInventaire = erreurs == 0
+            ? $"{ok} ajustement(s) enregistré(s) avec succès."
+            : $"{ok} succès, {erreurs} erreur(s).";
+
+        if (erreurs == 0) await Load();
+    }
+
+    private async Task EnregistrerEntreeSortie()
+    {
+        if (selectedArticleId == Guid.Empty || quantite <= 0)
+        {
+            message = "Sélectionnez un article et une quantité valide.";
+            msgCls = "alert-error";
+            return;
+        }
+        if (selectedEmplacementId == Guid.Empty)
+        {
+            message = "Sélectionnez un emplacement.";
+            msgCls = "alert-error";
+            return;
+        }
+        saving = true;
+        ResultDto? r;
+        if (modeAction == "entree")
+        {
+            r = await Api.EntreeStockAsync(new EntreeStockDto(
+                selectedArticleId, selectedEmplacementId, quantite,
+                prixUnitaire, reference, numeroLot, null, motif));
+        }
+        else
+        {
+            r = await Api.SortieStockAsync(new SortieStockDto(
+                selectedArticleId, selectedEmplacementId, quantite,
+                reference, numeroLot, motif));
+        }
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showEntreeSortie = false; await Load(); }
+    }
+
+    private async Task EnregistrerTransfert()
+    {
+        if (selectedArticleId == Guid.Empty || emplacementSourceId == Guid.Empty ||
+            emplacementDestId == Guid.Empty || quantite <= 0)
+        {
+            message = "Remplissez tous les champs obligatoires.";
+            msgCls = "alert-error";
+            return;
+        }
+        if (emplacementSourceId == emplacementDestId)
+        {
+            message = "Source et destination doivent être différents.";
+            msgCls = "alert-error";
+            return;
+        }
+        saving = true;
+        var r = await Api.TransfertStockAsync(new TransfertRequest
+        {
+            ArticleId = selectedArticleId,
+            EmplacementSourceId = emplacementSourceId,
+            EmplacementDestinationId = emplacementDestId,
+            Quantite = quantite,
+            NumeroLot = numeroLot
+        });
+        saving = false;
+        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
+        message = r?.Message;
+        if (r?.Succes == true) { showTransfert = false; await Load(); }
+    }
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}
