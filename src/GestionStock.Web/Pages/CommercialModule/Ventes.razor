@@ -10,13 +10,15 @@
 @inject IApiService Api
 @inject ICurrencyService Devise
 @inject IPrintService PrintService
+@inject IJSRuntime JS
 @inject NavigationManager Nav
+@implements IAsyncDisposable
 
 <PageTitle>Documents de vente - GestionStock</PageTitle>
 
 <div class="workspace-window-shell">
-    <section class="workspace-window @(ventesPageMinimized ? "workspace-window--minimized" : null) @(ventesPageMaximized ? "workspace-window--maximized" : null) @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window--child-open" : null)">
-        <header class="workspace-window-header">
+    <section id="ventes-workspace-window" class="workspace-window @(ventesPageMinimized ? "workspace-window--minimized" : null) @(ventesPageMaximized ? "workspace-window--maximized" : null) @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window--child-open" : null)">
+        <header id="ventes-workspace-header" class="workspace-window-header workspace-window-header--draggable">
             <div>
                 <h1 class="workspace-window-title">Documents de vente</h1>
                 <p class="workspace-window-subtitle">Consultation, validation et suivi des statuts</p>
@@ -31,6 +33,16 @@
         @if (!ventesPageMinimized)
         {
             <div class="workspace-window-toolbar">
+                <div class="ventes-type-tabs" role="tablist" aria-label="Types de documents">
+                    @foreach (var option in typeOptions)
+                    {
+                        <button type="button"
+                                class="chip-filter @(selectedTypeFilter == option.Value ? "chip-filter--active" : null)"
+                                @onclick="() => ChangerFiltreType(option.Value)">
+                            @option.Label
+                        </button>
+                    }
+                </div>
                 <div class="header-actions">
                     <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau document</button>
                 </div>
@@ -91,40 +103,12 @@
                                             <td class="actions-cell ventes-actions-cell @(openActionsDocumentId == d.Id ? "ventes-actions-cell--open" : null)">
                                                 @if (HasActions(d))
                                                 {
-                                                    <div class="ventes-actions-dropdown">
-                                                        <button type="button"
-                                                                class="btn-row-action btn-row-action--soft ventes-actions-trigger @((openActionsDocumentId.HasValue && openActionsDocumentId != d.Id) ? "ventes-actions-trigger--hidden" : null)"
-                                                                @onclick:stopPropagation="true"
-                                                                @onclick="() => ToggleActionsMenu(d.Id)">
-                                                            Actions
-                                                        </button>
-                                                        @if (openActionsDocumentId == d.Id)
-                                                        {
-                                                            <div class="ventes-actions-panel">
-                                                                @if (PeutModifier(d))
-                                                                {
-                                                                    <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await OuvrirEdition(d); }">Modifier</button>
-                                                                }
-                                                                @if (d.Statut == 1)
-                                                                {
-                                                                    <button class="btn-row-action btn-row-action--success" title="Valider" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Valider(d); }">Valider</button>
-                                                                }
-                                                                @if (d.TypeDocument == 4 && d.Solde > 0 && d.Statut != 5 && d.Statut != 10)
-                                                                {
-                                                                    <button class="btn-row-action btn-row-action--success" title="Encaisser" @onclick:stopPropagation="true" @onclick="() => { CloseActionsMenu(); OuvrirReglement(d); }">Encaisser</button>
-                                                                }
-                                                                @if (d.Statut == 4)
-                                                                {
-                                                                    <button class="btn-row-action btn-row-action--warn" title="Comptabiliser" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Comptabiliser(d); }">Comptabiliser</button>
-                                                                }
-                                                                <button class="btn-row-action btn-row-action--print" title="Imprimer" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Imprimer(d); }">Imprimer</button>
-                                                                @if (d.Statut != 5 && d.Statut != 10)
-                                                                {
-                                                                    <button class="btn-row-action btn-row-action--danger" title="Annuler" @onclick:stopPropagation="true" @onclick="async () => { CloseActionsMenu(); await Annuler(d); }">Annuler</button>
-                                                                }
-                                                            </div>
-                                                        }
-                                                    </div>
+                                                    <button type="button"
+                                                            class="btn-row-action btn-row-action--soft ventes-actions-trigger"
+                                                            @onclick:stopPropagation="true"
+                                                            @onclick="() => ToggleActionsMenu(d.Id)">
+                                                        Actions
+                                                    </button>
                                                 }
                                                 else
                                                 {
@@ -132,6 +116,36 @@
                                                 }
                                             </td>
                                         </tr>
+                                        @if (openActionsDocumentId == d.Id && HasActions(d))
+                                        {
+                                            <tr class="ventes-actions-row">
+                                                <td colspan="9">
+                                                    <div class="ventes-actions-inline-panel">
+                                                        @if (PeutModifier(d))
+                                                        {
+                                                            <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick="async () => { CloseActionsMenu(); await OuvrirEdition(d); }">Modifier</button>
+                                                        }
+                                                        @if (d.Statut == 1)
+                                                        {
+                                                            <button class="btn-row-action btn-row-action--success" title="Valider" @onclick="async () => { CloseActionsMenu(); await Valider(d); }">Valider</button>
+                                                        }
+                                                        @if (d.TypeDocument == 4 && d.Solde > 0 && d.Statut != 5 && d.Statut != 10)
+                                                        {
+                                                            <button class="btn-row-action btn-row-action--success" title="Encaisser" @onclick="() => { CloseActionsMenu(); OuvrirReglement(d); }">Encaisser</button>
+                                                        }
+                                                        @if (d.Statut == 4)
+                                                        {
+                                                            <button class="btn-row-action btn-row-action--warn" title="Comptabiliser" @onclick="async () => { CloseActionsMenu(); await Comptabiliser(d); }">Comptabiliser</button>
+                                                        }
+                                                        <button class="btn-row-action btn-row-action--print" title="Imprimer" @onclick="async () => { CloseActionsMenu(); await Imprimer(d); }">Imprimer</button>
+                                                        @if (d.Statut != 5 && d.Statut != 10)
+                                                        {
+                                                            <button class="btn-row-action btn-row-action--danger" title="Annuler" @onclick="async () => { CloseActionsMenu(); await Annuler(d); }">Annuler</button>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
                                 </tbody>
                             </table>
@@ -443,6 +457,9 @@
     private string editNumero = "";
     private DocumentVenteDto? selectedDoc;
     private DocumentVenteDetailDto? detailDoc;
+    private int selectedTypeFilter;
+    private IJSObjectReference? ventesWindowModule;
+    private bool ventesWindowInitialized;
 
     private int fType = 1;
     private string fClientId = "";
@@ -464,6 +481,15 @@
     private int currentPage = 1;
     private int pageSize = 10;
     private readonly int[] pageSizeOptions = [10, 20, 50, 100];
+    private readonly (int Value, string Label)[] typeOptions =
+    [
+        (0, "Tous"),
+        (1, "Devis"),
+        (2, "Commandes"),
+        (3, "BL"),
+        (4, "Factures"),
+        (5, "Avoirs")
+    ];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -475,6 +501,24 @@
         }
 
         await SynchroniserDepuisRouteAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!ventesPageMaximized)
+        {
+            var module = await EnsureVentesWindowModuleAsync();
+            if (!ventesWindowInitialized)
+            {
+                await module.InvokeVoidAsync("initializeFloatingWindow", "ventes-workspace-window", "ventes-workspace-header");
+                ventesWindowInitialized = true;
+            }
+        }
+
+        if (ventesWindowModule != null)
+        {
+            await ventesWindowModule.InvokeVoidAsync("setWindowMaximized", "ventes-workspace-window", ventesPageMaximized);
+        }
     }
 
     private async Task Recharger()
@@ -572,13 +616,27 @@
         FermerReglementInterne();
     }
     private void ToggleVentesPage() => ventesPageMinimized = !ventesPageMinimized;
-    private void ToggleVentesPageMaximized() => ventesPageMaximized = !ventesPageMaximized;
+    private async Task ToggleVentesPageMaximized()
+    {
+        ventesPageMaximized = !ventesPageMaximized;
+        if (ventesWindowModule != null)
+        {
+            await ventesWindowModule.InvokeVoidAsync("setWindowMaximized", "ventes-workspace-window", ventesPageMaximized);
+        }
+    }
     private void FermerVentesPage() => Nav.NavigateTo("/commercial/dashboard");
     private void ToggleFormMinimized() => showFormMinimized = !showFormMinimized;
     private void ToggleDetailMinimized() => showDetailMinimized = !showDetailMinimized;
     private void ToggleReglementMinimized() => showReglementMinimized = !showReglementMinimized;
     private void ToggleActionsMenu(Guid id) => openActionsDocumentId = openActionsDocumentId == id ? null : id;
     private void CloseActionsMenu() => openActionsDocumentId = null;
+    private void ChangerFiltreType(int value)
+    {
+        selectedTypeFilter = value;
+        currentPage = 1;
+        CloseActionsMenu();
+        AssurerPaginationValide();
+    }
     private void OuvrirCreationClientRapide()
     {
         quickClientNom = string.IsNullOrWhiteSpace(clientSearch) ? "" : clientSearch;
@@ -783,23 +841,29 @@
 
     private string Montant(decimal value) => Devise.FormatAmount(value);
 
+    private IEnumerable<DocumentVenteDto> DocumentsFiltres =>
+        selectedTypeFilter == 0
+            ? documents
+            : documents.Where(d => d.TypeDocument == selectedTypeFilter);
+
     private IEnumerable<DocumentVenteDto> DocumentsPage =>
-        documents
+        DocumentsFiltres
             .Skip((currentPage - 1) * pageSize)
             .Take(pageSize);
 
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(documents.Count / (double)pageSize));
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(DocumentsFiltres.Count() / (double)pageSize));
 
     private string PaginationResume
     {
         get
         {
-            if (documents.Count == 0)
+            var total = DocumentsFiltres.Count();
+            if (total == 0)
                 return "Aucun document";
 
             var debut = ((currentPage - 1) * pageSize) + 1;
-            var fin = Math.Min(currentPage * pageSize, documents.Count);
-            return $"{debut}-{fin} sur {documents.Count}";
+            var fin = Math.Min(currentPage * pageSize, total);
+            return $"{debut}-{fin} sur {total}";
         }
     }
 
@@ -938,6 +1002,26 @@
 
         if (showForm && !editId.HasValue)
             FermerFormInterne();
+    }
+
+    private async ValueTask<IJSObjectReference> EnsureVentesWindowModuleAsync()
+    {
+        ventesWindowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/windowing.js");
+        return ventesWindowModule;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (ventesWindowModule is not null)
+        {
+            try
+            {
+                await ventesWindowModule.DisposeAsync();
+            }
+            catch
+            {
+            }
+        }
     }
 }
 
