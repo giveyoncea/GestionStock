@@ -1,0 +1,306 @@
+@page "/ventes/consultation/{DocumentId:guid}"
+@page "/commercial/ventes/consultation/{DocumentId:guid}"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject IPrintService PrintService
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<PageTitle>Consultation vente - GestionStock</PageTitle>
+
+<div class="vente-consultation-page">
+    <div class="vente-consultation-overlay"></div>
+
+    <section id="vente-consultation-window" class="vente-consultation-window @(consultationMinimized ? "vente-consultation-window--minimized" : null) @(consultationMaximized ? "vente-consultation-window--maximized" : null)">
+        <header id="vente-consultation-header" class="vente-consultation-header vente-consultation-header--draggable">
+            <div class="vente-consultation-heading">
+                <div class="vente-consultation-breadcrumb">Ventes / Consultation</div>
+                <h1 class="vente-consultation-title">@(detail?.Numero is not null ? $"Consultation - {detail.Numero}" : "Consultation du document")</h1>
+                <p class="vente-consultation-subtitle">Lecture detaillee du document, de ses lignes et de son avancement.</p>
+            </div>
+            <div class="vente-consultation-actions">
+                <button type="button" class="vente-consultation-window-btn" title="Réduire" @onclick="ToggleMinimize">−</button>
+                <button type="button" class="vente-consultation-window-btn" title="@(consultationMaximized ? "Restaurer" : "Agrandir")" @onclick="ToggleMaximize">@(consultationMaximized ? "❐" : "□")</button>
+                <button type="button" class="vente-consultation-window-btn vente-consultation-window-btn--close" title="Fermer" @onclick="Fermer">×</button>
+                <button type="button" class="btn-secondary" @onclick="RetourListe">Retour a la liste</button>
+                <button type="button" class="btn-primary" @onclick="Imprimer" disabled="@(detail is null || chargement)">Imprimer</button>
+            </div>
+        </header>
+
+        @if (!consultationMinimized)
+        {
+        <div class="vente-consultation-body">
+            @if (chargement)
+            {
+                <div class="vente-consultation-state">
+                    <div class="spinner-lg"></div>
+                    <div>Chargement du document...</div>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="alert-error">@message</div>
+            }
+            else if (detail is not null)
+            {
+                <section class="vente-consultation-summary">
+                    <article class="vente-summary-card">
+                        <div class="vente-summary-label">Total TTC</div>
+                        <div class="vente-summary-value">@Montant(detail.MontantTTC)</div>
+                    </article>
+                    <article class="vente-summary-card">
+                        <div class="vente-summary-label">Montant regle</div>
+                        <div class="vente-summary-value">@Montant(detail.MontantRegle)</div>
+                    </article>
+                    <article class="vente-summary-card">
+                        <div class="vente-summary-label">Reste a regler</div>
+                        <div class="vente-summary-value">@Montant(MontantRestant)</div>
+                    </article>
+                    <article class="vente-summary-card">
+                        <div class="vente-summary-label">Lignes</div>
+                        <div class="vente-summary-value">@detail.Lignes.Count</div>
+                    </article>
+                </section>
+
+                <section class="vente-consultation-section">
+                    <div class="vente-consultation-section-head">
+                        <h2>Informations generales</h2>
+                        <span class="badge @GetStatutBadge(detail.Statut)">@detail.StatutLibelle</span>
+                    </div>
+                    <div class="vente-consultation-grid">
+                        <div class="field-group">
+                            <label class="field-label">Type</label>
+                            <div class="field-input">@detail.TypeLibelle</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Client</label>
+                            <div class="field-input">@detail.ClientNom</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Date</label>
+                            <div class="field-input">@detail.DateDocument.ToString("dd/MM/yyyy")</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Echeance</label>
+                            <div class="field-input">@(detail.DateEcheance?.ToString("dd/MM/yyyy") ?? "—")</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Montant HT</label>
+                            <div class="field-input">@Montant(detail.MontantHT)</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Remise</label>
+                            <div class="field-input">@Montant(detail.MontantRemise)</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">TVA</label>
+                            <div class="field-input">@Montant(detail.MontantTVA)</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Frais de livraison</label>
+                            <div class="field-input">@Montant(detail.FraisLivraison)</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Acompte</label>
+                            <div class="field-input">@Montant(detail.MontantAcompte)</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Verrouillage</label>
+                            <div class="field-input">@(detail.EstVerrouille ? "Oui" : "Non")</div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(detail.AdresseLivraison))
+                        {
+                            <div class="field-group field-group--wide">
+                                <label class="field-label">Adresse de livraison</label>
+                                <div class="field-input field-input--multiline">@detail.AdresseLivraison</div>
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <section class="vente-consultation-section">
+                    <div class="vente-consultation-section-head">
+                        <h2>Lignes du document</h2>
+                        <span class="vente-consultation-inline-note">@detail.Lignes.Count ligne(s)</span>
+                    </div>
+                    <div class="table-container vente-consultation-table">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Article</th>
+                                    <th class="text-right">Qte</th>
+                                    <th class="text-right">PU HT</th>
+                                    <th class="text-right">TVA %</th>
+                                    <th class="text-right">Total TTC</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ligne in detail.Lignes.OrderBy(l => l.Ordre))
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="vente-line-title">@ligne.Designation</div>
+                                            @if (!string.IsNullOrWhiteSpace(ligne.ArticleCode))
+                                            {
+                                                <div class="vente-line-sub">@ligne.ArticleCode</div>
+                                            }
+                                        </td>
+                                        <td class="text-right mono">@ligne.Quantite</td>
+                                        <td class="text-right mono">@Montant(ligne.PrixUnitaireHT)</td>
+                                        <td class="text-right mono">@ligne.TauxTVA</td>
+                                        <td class="text-right mono">@Montant(ligne.MontantTTC)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                @if (!string.IsNullOrWhiteSpace(detail.NotesInternes) || !string.IsNullOrWhiteSpace(detail.NotesExterne))
+                {
+                    <section class="vente-consultation-section">
+                        <div class="vente-consultation-section-head">
+                            <h2>Notes</h2>
+                        </div>
+                        <div class="vente-consultation-notes">
+                            @if (!string.IsNullOrWhiteSpace(detail.NotesInternes))
+                            {
+                                <div class="vente-consultation-note-card">
+                                    <div class="vente-consultation-note-title">Notes internes</div>
+                                    <div>@detail.NotesInternes</div>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(detail.NotesExterne))
+                            {
+                                <div class="vente-consultation-note-card">
+                                    <div class="vente-consultation-note-title">Notes externes</div>
+                                    <div>@detail.NotesExterne</div>
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+            }
+        </div>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter] public Guid DocumentId { get; set; }
+
+    private bool chargement = true;
+    private string? message;
+    private DocumentVenteDetailDto? detail;
+    private bool consultationMinimized;
+    private bool consultationMaximized;
+    private IJSObjectReference? consultationWindowModule;
+    private bool consultationWindowInitialized;
+    private decimal MontantRestant => detail is null ? 0 : Math.Max(0, detail.MontantTTC - detail.MontantRegle);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        chargement = true;
+        message = null;
+        detail = null;
+
+        try
+        {
+            await Devise.EnsureLoadedAsync();
+            detail = await Api.GetVenteAsync(DocumentId);
+            if (detail is null)
+                message = "Document introuvable.";
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+        finally
+        {
+            chargement = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!consultationMaximized)
+        {
+            var module = await EnsureConsultationWindowModuleAsync();
+            if (!consultationWindowInitialized)
+            {
+                await module.InvokeVoidAsync("initializeFloatingWindow", "vente-consultation-window", "vente-consultation-header");
+                consultationWindowInitialized = true;
+            }
+        }
+
+        if (consultationWindowModule is not null)
+        {
+            await consultationWindowModule.InvokeVoidAsync("setWindowMaximized", "vente-consultation-window", consultationMaximized);
+        }
+    }
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+
+    private string GetStatutBadge(int statut) => statut switch
+    {
+        1 => "badge-plain",
+        2 => "badge-info",
+        4 => "badge-warning",
+        5 => "badge-success",
+        10 => "badge-danger",
+        _ => "badge-plain"
+    };
+
+    private void RetourListe() => Nav.NavigateTo("/commercial/ventes");
+
+    private void ToggleMinimize() => consultationMinimized = !consultationMinimized;
+
+    private async Task ToggleMaximize()
+    {
+        consultationMaximized = !consultationMaximized;
+        if (consultationWindowModule is not null)
+        {
+            await consultationWindowModule.InvokeVoidAsync("setWindowMaximized", "vente-consultation-window", consultationMaximized);
+        }
+    }
+
+    private void Fermer() => Nav.NavigateTo("/commercial/ventes");
+
+    private async Task Imprimer()
+    {
+        if (detail is null)
+            return;
+
+        var parametres = await Api.GetParametresAsync();
+        if (parametres is null)
+        {
+            message = "Impossible de preparer l'impression du document.";
+            return;
+        }
+
+        await PrintService.PrintDocumentVenteAsync(detail, parametres, Devise);
+    }
+
+    private async Task<IJSObjectReference> EnsureConsultationWindowModuleAsync()
+    {
+        consultationWindowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/windowing.js");
+        return consultationWindowModule;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (consultationWindowModule is not null)
+        {
+            try
+            {
+                await consultationWindowModule.DisposeAsync();
+            }
+            catch
+            {
+                // Ignored
+            }
+        }
+    }
+}
