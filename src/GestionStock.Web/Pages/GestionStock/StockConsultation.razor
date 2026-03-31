@@ -1,0 +1,229 @@
+@page "/stocks/consultation/{DocumentId:guid}"
+@page "/stocks/consulter/{DocumentId:guid}"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject IPrintService PrintService
+@inject NavigationManager Nav
+
+<PageTitle>Consultation document de stock - GestionStock</PageTitle>
+
+<div class="stock-consultation-page">
+    <div class="stock-consultation-page__overlay"></div>
+
+    <section class="stock-consultation-window">
+        <header class="stock-consultation-window__header">
+            <div>
+                <div class="stock-consultation-window__breadcrumb">Stocks / Consultation</div>
+                <h1 class="stock-consultation-window__title">
+                    @(document?.Numero is not null ? $"Document {document.Numero}" : "Consultation du document")
+                </h1>
+                <p class="stock-consultation-window__subtitle">Consultez l'entete du document, ses lignes et sa valorisation sans quitter le module stock.</p>
+            </div>
+            <div class="stock-consultation-window__actions">
+                <button class="btn-secondary" @onclick="RetourListe">Retour a la liste</button>
+                <button class="btn-primary" @onclick="Imprimer" disabled="@(chargement || document is null)">Imprimer</button>
+            </div>
+        </header>
+
+        <div class="stock-consultation-window__body">
+            @if (chargement)
+            {
+                <div class="loading-state"><div class="spinner-lg"></div></div>
+            }
+            else if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="alert-error">@message</div>
+            }
+            else if (document is not null)
+            {
+                <section class="stock-consultation-summary">
+                    <article class="stock-consultation-summary__card">
+                        <span class="stock-consultation-summary__label">Type</span>
+                        <strong>@document.TypeLibelle</strong>
+                    </article>
+                    <article class="stock-consultation-summary__card">
+                        <span class="stock-consultation-summary__label">Date</span>
+                        <strong>@document.DateDocument.ToString("dd/MM/yyyy HH:mm")</strong>
+                    </article>
+                    <article class="stock-consultation-summary__card">
+                        <span class="stock-consultation-summary__label">Lignes</span>
+                        <strong>@document.NombreLignes</strong>
+                    </article>
+                    <article class="stock-consultation-summary__card">
+                        <span class="stock-consultation-summary__label">Valeur</span>
+                        <strong>@Montant(document.ValeurTotale)</strong>
+                    </article>
+                </section>
+
+                <section class="stock-consultation-card">
+                    <div class="stock-consultation-card__head">
+                        <h2>Entete du document</h2>
+                        <span class="badge @(document.Statut == 1 ? "badge-green" : "badge-amber")">@document.StatutLibelle</span>
+                    </div>
+                    <div class="stock-consultation-grid">
+                        <div class="field-group">
+                            <label class="field-label">Numero</label>
+                            <div class="field-input">@document.Numero</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Reference</label>
+                            <div class="field-input">@(string.IsNullOrWhiteSpace(document.Reference) ? "—" : document.Reference)</div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Operateur</label>
+                            <div class="field-input">@document.CreatedBy</div>
+                        </div>
+                        <div class="field-group field-group--wide">
+                            <label class="field-label">Articles</label>
+                            <div class="field-input field-input--multiline">@document.ResumeArticles</div>
+                        </div>
+                        <div class="field-group field-group--wide">
+                            <label class="field-label">Motif</label>
+                            <div class="field-input field-input--multiline">@(string.IsNullOrWhiteSpace(document.Motif) ? "—" : document.Motif)</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="stock-consultation-card">
+                    <div class="stock-consultation-card__head">
+                        <h2>Lignes du document</h2>
+                        <span class="stock-consultation-card__count">@document.Lignes.Count ligne(s)</span>
+                    </div>
+                    <div class="table-container stock-consultation-table">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Article</th>
+                                    <th>Emplacement</th>
+                                    <th>N° lot / serie</th>
+                                    <th class="text-right">Quantite</th>
+                                    <th class="text-right">Valeur unitaire</th>
+                                    <th class="text-right">Valeur totale</th>
+                                    <th>Motif</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var ligne in document.Lignes.OrderBy(l => l.Ordre))
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="cell-main">@ligne.Designation</div>
+                                            <div class="cell-sub"><code>@ligne.ArticleCode</code></div>
+                                        </td>
+                                        <td class="text-muted small">@FormatEmplacement(ligne)</td>
+                                        <td class="text-muted small">@FormatLotSerie(ligne)</td>
+                                        <td class="text-right mono">@ligne.Quantite</td>
+                                        <td class="text-right mono">@Montant(ligne.ValeurUnitaire)</td>
+                                        <td class="text-right mono">@Montant(ligne.ValeurTotale)</td>
+                                        <td class="text-muted small">@(string.IsNullOrWhiteSpace(ligne.Motif) ? "—" : ligne.Motif)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    [Parameter] public Guid DocumentId { get; set; }
+
+    private bool chargement = true;
+    private string? message;
+    private DocumentStockDto? document;
+    private ParametresDto? parametres;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        chargement = true;
+        message = null;
+        document = null;
+
+        try
+        {
+            await Devise.EnsureLoadedAsync();
+            var documentTask = Api.GetDocumentStockAsync(DocumentId);
+            var parametresTask = Api.GetParametresAsync();
+
+            await Task.WhenAll(documentTask, parametresTask);
+
+            document = await documentTask;
+            parametres = await parametresTask;
+
+            if (document is null)
+                message = "Document introuvable.";
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+        finally
+        {
+            chargement = false;
+        }
+    }
+
+    private async Task Imprimer()
+    {
+        if (document is null)
+            return;
+
+        parametres ??= await Api.GetParametresAsync() ?? new ParametresDto();
+        await PrintService.PrintDocumentStockAsync(ToPrintDto(document), parametres, Devise);
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/stocks");
+
+    private DocumentStockPrintDto ToPrintDto(DocumentStockDto doc) =>
+        new(
+            string.IsNullOrWhiteSpace(doc.Reference) ? doc.Numero : doc.Reference!,
+            doc.TypeLibelle,
+            doc.DateDocument,
+            doc.NombreLignes,
+            doc.QuantiteTotale,
+            doc.ValeurTotale,
+            doc.CreatedBy,
+            doc.Motif,
+            doc.Lignes
+                .OrderBy(l => l.Ordre)
+                .Select(l => new DocumentStockPrintLineDto(
+                    l.ArticleCode,
+                    l.Designation,
+                    l.EmplacementSourceCode ?? string.Empty,
+                    l.EmplacementDestinationCode,
+                    l.NumeroLot,
+                    l.NumeroSerie,
+                    l.Quantite,
+                    l.ValeurUnitaire,
+                    l.ValeurTotale,
+                    l.Motif))
+                .ToList());
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+
+    private static string FormatEmplacement(LigneDocumentStockDto ligne)
+    {
+        var source = ligne.EmplacementSourceCode;
+        var destination = ligne.EmplacementDestinationCode;
+
+        if (!string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(destination))
+            return $"{source} -> {destination}";
+        if (!string.IsNullOrWhiteSpace(source))
+            return source;
+        if (!string.IsNullOrWhiteSpace(destination))
+            return destination;
+        return "—";
+    }
+
+    private static string FormatLotSerie(LigneDocumentStockDto ligne)
+    {
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+            return $"Serie: {ligne.NumeroSerie}";
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroLot))
+            return $"Lot: {ligne.NumeroLot}";
+        return "—";
+    }
+}

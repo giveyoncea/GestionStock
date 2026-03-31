@@ -9,7 +9,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Gestion Commerciale</h1>
-        <p class="page-date">Ventes · Achats · Clients · Fournisseurs · Règlements</p>
+        <p class="page-subtitle">Ventes · Achats · Clients · Fournisseurs · Règlements</p>
     </div>
     <div class="header-actions">
         @if (onglet == "ventes")
@@ -30,6 +30,19 @@
         }
     </div>
 </div>
+
+<section class="surface-hero surface-hero--compact">
+    <div class="surface-hero-copy">
+        <span class="surface-hero-eyebrow">Parcours métier</span>
+        <h2>Travaillez par domaine avec des actions claires</h2>
+        <p>Chaque écran est recentré sur un objectif simple : suivre, créer, consulter et traiter rapidement les documents ou les tiers concernés.</p>
+    </div>
+    <div class="surface-hero-pills">
+        <span class="surface-pill">Devis et factures</span>
+        <span class="surface-pill">Achats fournisseurs</span>
+        <span class="surface-pill">Gestion des tiers</span>
+    </div>
+</section>
 <div class="comm-tabs">
     <button class="comm-tab @(onglet=="dashboard"?"comm-tab--active":"")" @onclick='() => SetOnglet("dashboard")'>Tableau de bord</button>
     <button class="comm-tab @(onglet=="ventes"?"comm-tab--active":"")" @onclick='() => SetOnglet("ventes")'>Ventes</button>

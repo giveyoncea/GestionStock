@@ -1,0 +1,411 @@
+@page "/stocks/entree"
+@attribute [Authorize]
+@inject IApiService Api
+@inject NavigationManager Nav
+@inject ICurrencyService Devise
+
+<PageTitle>Entree de stock - GestionStock</PageTitle>
+
+<div class="stock-operation-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Document d'entree de stock</h1>
+            <p class="page-subtitle">Créez une vraie fiche d'entrée avec une entête et plusieurs lignes de document.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux documents</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact stock-operation-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Document d'entree</span>
+            <h2>Ajoutez plusieurs lignes dans une seule fiche pour garder une traçabilité propre.</h2>
+            <p>La référence, la date et le motif sont portés par le document. Chaque ligne précise ensuite l'article, l'emplacement et la valorisation.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Entête</span>
+            <span class="surface-pill">Lignes</span>
+            <span class="surface-pill">Lots</span>
+            <span class="surface-pill">Séries</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <section class="editor-shell stock-document-entry-shell">
+            <div class="editor-card stock-document-entry-card">
+                <div class="editor-section">
+                    <div class="form-section-title">Entête du document</div>
+                    <div class="editor-grid">
+                        <div class="field-group">
+                            <label class="field-label">Date du document *</label>
+                            <input class="field-input" type="date" @bind="dateDocument" />
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Référence *</label>
+                            <input class="field-input" @bind="reference" placeholder="ENT-2026-0001" />
+                        </div>
+                        <div class="field-group editor-span-3">
+                            <label class="field-label">Motif général</label>
+                            <input class="field-input" @bind="motifDocument" placeholder="Réception fournisseur, entrée initiale, retour atelier..." />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="stock-document-entry-title-row">
+                        <div>
+                            <div class="form-section-title">Ajouter une ligne</div>
+                            <p class="stock-document-entry-help">Chaque ligne alimente le stock et sera reprise dans le document final.</p>
+                        </div>
+                    </div>
+
+                    <div class="editor-grid stock-document-entry-grid">
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Article *</label>
+                            <select class="field-input" @bind="draft.ArticleId" @bind:after="OnDraftArticleChanged">
+                                <option value="@Guid.Empty">Sélectionner</option>
+                                @foreach (var article in articles)
+                                {
+                                    <option value="@article.Id">[@article.Code] @article.Designation</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Emplacement *</label>
+                            <select class="field-input" @bind="draft.EmplacementId">
+                                <option value="@Guid.Empty">Sélectionner</option>
+                                @foreach (var e in emplacements)
+                                {
+                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Quantité *</label>
+                            <input class="field-input" type="number" min="1" @bind="draft.Quantite" disabled="@DraftArticleSerialise" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">@($"Prix unitaire ({Devise.Symbol})")</label>
+                            <input class="field-input" type="number" step="@Devise.AmountStep" min="0" @bind="draft.PrixUnitaire" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">N° lot</label>
+                            <input class="field-input" @bind="draft.NumeroLot" />
+                        </div>
+                        @if (DraftArticleSerialise)
+                        {
+                            <div class="field-group">
+                                <label class="field-label">N° série *</label>
+                                <input class="field-input" @bind="draft.NumeroSerie" placeholder="SN-000001" />
+                            </div>
+                        }
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Motif de ligne</label>
+                            <input class="field-input" @bind="draft.Motif" placeholder="Optionnel si le motif général suffit" />
+                        </div>
+                    </div>
+
+                    <div class="stock-document-entry-line-actions">
+                        <button class="btn btn-secondary" @onclick="ReinitialiserDraft" type="button">Réinitialiser la ligne</button>
+                        <button class="btn btn-primary" @onclick="AjouterLigne" type="button">Ajouter la ligne</button>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="stock-document-entry-title-row">
+                        <div>
+                            <div class="form-section-title">Lignes du document</div>
+                            <p class="stock-document-entry-help">@lignes.Count ligne(s) prêtes à être enregistrées.</p>
+                        </div>
+                        <div class="stock-document-entry-summary">
+                            <span><strong>@lignes.Sum(l => l.Quantite)</strong> unité(s)</span>
+                            <span><strong>@Devise.FormatAmount(lignes.Sum(l => l.Quantite * l.PrixUnitaire))</strong></span>
+                        </div>
+                    </div>
+
+                    @if (lignes.Count == 0)
+                    {
+                        <div class="empty-state">Ajoutez au moins une ligne pour créer le document d'entrée.</div>
+                    }
+                    else
+                    {
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Article</th>
+                                        <th>Emplacement</th>
+                                        <th class="text-right">Quantité</th>
+                                        <th class="text-right">PU</th>
+                                        <th class="text-right">Total</th>
+                                        <th>Lot / Série</th>
+                                        <th>Motif</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var ligne in lignes.Select((value, index) => new { value, index }))
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="cell-main">@ligne.value.ArticleDesignation</div>
+                                                <div class="cell-sub"><code>@ligne.value.ArticleCode</code></div>
+                                            </td>
+                                            <td>@ligne.value.EmplacementCode</td>
+                                            <td class="text-right mono">@ligne.value.Quantite</td>
+                                            <td class="text-right mono">@Devise.FormatAmount(ligne.value.PrixUnitaire)</td>
+                                            <td class="text-right mono">@Devise.FormatAmount(ligne.value.Quantite * ligne.value.PrixUnitaire)</td>
+                                            <td class="text-muted small">@FormatLotSerie(ligne.value)</td>
+                                            <td class="text-muted small">@(string.IsNullOrWhiteSpace(ligne.value.Motif) ? "—" : ligne.value.Motif)</td>
+                                            <td class="text-right">
+                                                <button class="btn-row-action btn-row-action--danger" type="button" @onclick="() => SupprimerLigne(ligne.index)">Retirer</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <aside class="editor-side">
+                <div class="editor-side-card">
+                    <h3>Repères</h3>
+                    <ul class="editor-hints">
+                        <li>La référence identifie le document complet, pas une ligne isolée.</li>
+                        <li>Un article sans suivi de stock ne doit pas être ajouté ici.</li>
+                        <li>Pour un article sérialisé, la quantité est forcée à 1 et le numéro de série devient obligatoire.</li>
+                        <li>Le document apparaîtra ensuite dans <strong>Documents stock</strong> avec toutes ses lignes.</li>
+                    </ul>
+                </div>
+            </aside>
+        </section>
+
+        <div class="editor-footer">
+            <div></div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                <button class="btn btn-primary" @onclick="EnregistrerDocument" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer le document")</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private sealed class EntreeDraft
+    {
+        public Guid ArticleId { get; set; }
+        public Guid EmplacementId { get; set; }
+        public int Quantite { get; set; } = 1;
+        public decimal PrixUnitaire { get; set; }
+        public string? NumeroLot { get; set; }
+        public string? NumeroSerie { get; set; }
+        public string? Motif { get; set; }
+    }
+
+    private sealed class EntreeLineVm
+    {
+        public Guid ArticleId { get; init; }
+        public string ArticleCode { get; init; } = string.Empty;
+        public string ArticleDesignation { get; init; } = string.Empty;
+        public Guid EmplacementId { get; init; }
+        public string EmplacementCode { get; init; } = string.Empty;
+        public int Quantite { get; init; }
+        public decimal PrixUnitaire { get; init; }
+        public string? NumeroLot { get; init; }
+        public string? NumeroSerie { get; init; }
+        public string? Motif { get; init; }
+    }
+
+    private readonly List<EntreeLineVm> lignes = new();
+    private readonly EntreeDraft draft = new();
+    private List<ArticleDto> articles = new();
+    private List<EmplacementDto> emplacements = new();
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+    private DateTime dateDocument = DateTime.Today;
+    private string reference = $"ENT-{DateTime.Today:yyyyMMdd-HHmm}";
+    private string? motifDocument;
+    private ArticleDto? draftArticle;
+    private bool DraftArticleSerialise => draftArticle?.GestionNumeroDeSerie == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await Charger();
+    }
+
+    private async Task Charger()
+    {
+        chargement = true;
+        var articlesTask = Api.GetArticlesAsync(1, 500, null, null);
+        var emplacementsTask = Api.GetEmplacementsAsync();
+        await Task.WhenAll(articlesTask, emplacementsTask);
+
+        articles = ((await articlesTask)?.Items ?? Enumerable.Empty<ArticleDto>())
+            .Where(a => !a.SansSuiviStock)
+            .OrderBy(a => a.Designation)
+            .ToList();
+        emplacements = (await emplacementsTask) ?? new();
+        chargement = false;
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/stocks/documents");
+
+    private Task OnDraftArticleChanged()
+    {
+        draftArticle = articles.FirstOrDefault(a => a.Id == draft.ArticleId);
+        if (DraftArticleSerialise)
+        {
+            draft.Quantite = 1;
+        }
+        else
+        {
+            draft.NumeroSerie = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ReinitialiserDraft()
+    {
+        draft.ArticleId = Guid.Empty;
+        draft.EmplacementId = Guid.Empty;
+        draft.Quantite = 1;
+        draft.PrixUnitaire = 0;
+        draft.NumeroLot = null;
+        draft.NumeroSerie = null;
+        draft.Motif = null;
+        draftArticle = null;
+        message = null;
+    }
+
+    private Task AjouterLigne()
+    {
+        var article = articles.FirstOrDefault(a => a.Id == draft.ArticleId);
+        var emplacement = emplacements.FirstOrDefault(e => e.Id == draft.EmplacementId);
+
+        if (article is null || emplacement is null)
+        {
+            msgCls = "alert-error";
+            message = "Sélectionnez un article et un emplacement valides avant d'ajouter la ligne.";
+            return Task.CompletedTask;
+        }
+
+        if (draft.Quantite <= 0)
+        {
+            msgCls = "alert-error";
+            message = "La quantité de la ligne doit être supérieure à zéro.";
+            return Task.CompletedTask;
+        }
+
+        if (article.GestionNumeroDeSerie)
+        {
+            if (draft.Quantite != 1)
+            {
+                msgCls = "alert-error";
+                message = "Un article sérialisé doit être saisi avec une quantité égale à 1.";
+                return Task.CompletedTask;
+            }
+
+            if (string.IsNullOrWhiteSpace(draft.NumeroSerie))
+            {
+                msgCls = "alert-error";
+                message = "Le numéro de série est obligatoire pour cet article.";
+                return Task.CompletedTask;
+            }
+        }
+
+        lignes.Add(new EntreeLineVm
+        {
+            ArticleId = article.Id,
+            ArticleCode = article.Code,
+            ArticleDesignation = article.Designation,
+            EmplacementId = emplacement.Id,
+            EmplacementCode = $"[{emplacement.Zone}] {emplacement.Code}",
+            Quantite = draft.Quantite,
+            PrixUnitaire = draft.PrixUnitaire,
+            NumeroLot = draft.NumeroLot,
+            NumeroSerie = draft.NumeroSerie,
+            Motif = draft.Motif
+        });
+
+        msgCls = "alert-success";
+        message = "Ligne ajoutée au document.";
+        ReinitialiserDraft();
+        return Task.CompletedTask;
+    }
+
+    private void SupprimerLigne(int index)
+    {
+        if (index < 0 || index >= lignes.Count)
+            return;
+
+        lignes.RemoveAt(index);
+        message = lignes.Count == 0 ? "La ligne a été retirée du document." : "Ligne retirée du document.";
+        msgCls = "alert-success";
+    }
+
+    private async Task EnregistrerDocument()
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            msgCls = "alert-error";
+            message = "La référence du document est obligatoire.";
+            return;
+        }
+
+        if (lignes.Count == 0)
+        {
+            msgCls = "alert-error";
+            message = "Ajoutez au moins une ligne avant d'enregistrer le document.";
+            return;
+        }
+
+        saving = true;
+        var result = await Api.CreerDocumentEntreeStockAsync(new DocumentEntreeStockRequest
+        {
+            DateDocument = dateDocument,
+            Reference = reference,
+            Motif = motifDocument,
+            Lignes = lignes.Select(l => new LigneDocumentEntreeStockRequest
+            {
+                ArticleId = l.ArticleId,
+                EmplacementId = l.EmplacementId,
+                Quantite = l.Quantite,
+                PrixUnitaire = l.PrixUnitaire,
+                NumeroLot = l.NumeroLot,
+                NumeroSerie = l.NumeroSerie,
+                Motif = l.Motif
+            }).ToList()
+        });
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+
+        if (result?.Succes == true)
+            Nav.NavigateTo("/stocks/documents");
+    }
+
+    private static string FormatLotSerie(EntreeLineVm ligne)
+    {
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+            return $"Série: {ligne.NumeroSerie}";
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroLot))
+            return $"Lot: {ligne.NumeroLot}";
+        return "—";
+    }
+}

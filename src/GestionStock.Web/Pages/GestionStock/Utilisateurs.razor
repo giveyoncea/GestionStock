@@ -2,15 +2,15 @@
 @attribute [Authorize(Roles = "Admin")]
 @inject IApiService Api
 
-<PageTitle>Utilisateurs â€“ GestionStock</PageTitle>
+<PageTitle>Utilisateurs - GestionStock</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1 class="page-title">Utilisateurs & RÃ´les</h1>
-        <p class="page-date">Gestion des accÃ¨s et des permissions</p>
+        <h1 class="page-title">Utilisateurs & Rôles</h1>
+        <p class="page-date">Gestion des accès et des permissions</p>
     </div>
     <div class="header-actions">
-        <button class="btn-secondary" @onclick="OuvrirRoles">ðŸ›¡ Voir les rÃ´les</button>
+        <button class="btn-secondary" @onclick="OuvrirRoles">Voir les rôles</button>
         <button class="btn-primary" @onclick="OuvrirCreation">+ Nouvel utilisateur</button>
     </div>
 </div>
@@ -38,17 +38,17 @@ else
                         <span class="user-card-admin-email">@u.Email</span>
                         <div class="user-card-admin-badges">
                             <span class="badge @GetRoleBadgeCls(u.Role)">@u.RoleLibelle</span>
-                            @if (u.HasCustomPermissions) { <span class="badge badge-amber" title="Permissions personnalisÃ©es">âš¡ Custom</span> }
+                            @if (u.HasCustomPermissions) { <span class="badge badge-amber" title="Permissions personnalisées">Custom</span> }
                             @if (!u.EstActif) { <span class="badge badge-gray">Inactif</span> }
-                            @if (u.EstVerrouille) { <span class="badge badge-red">VerrouillÃ©</span> }
+                            @if (u.EstVerrouille) { <span class="badge badge-red">Verrouillé</span> }
                         </div>
                     </div>
                 </div>
                 <div class="user-card-admin-meta">
-                    <span>ðŸ“… CrÃ©Ã© : @u.CreatedAt.ToString("dd/MM/yyyy")</span>
+                    <span>Créé : @u.CreatedAt.ToString("dd/MM/yyyy")</span>
                     @if (u.DerniereConnexion.HasValue)
                     {
-                        <span>ðŸ• DerniÃ¨re connexion : @u.DerniereConnexion.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                        <span>Dernière connexion : @u.DerniereConnexion.Value.ToString("dd/MM/yyyy HH:mm")</span>
                     }
                 </div>
                 <div class="user-permissions-list">
@@ -83,18 +83,18 @@ else
     </div>
     @if (!utilisateurs.Any())
     {
-        <div class="empty-state">Aucun utilisateur trouvÃ©.</div>
+        <div class="empty-state">Aucun utilisateur trouvé.</div>
     }
 }
 
-@* â”€â”€â”€ MODAL RÃ”LES & PERMISSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal roles et permissions *@
 @if (showRoles)
 {
     <div class="modal-overlay" @onclick="() => showRoles = false">
         <div class="modal modal-lg" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>ðŸ›¡ RÃ´les & Permissions</h2>
-                <button class="btn-close" @onclick="() => showRoles = false">âœ•</button>
+                <h2>Rôles & Permissions</h2>
+                <button class="btn-close" @onclick="() => showRoles = false">✕</button>
             </div>
             <div class="modal-body">
                 <div class="roles-grid">
@@ -122,19 +122,19 @@ else
     </div>
 }
 
-@* â”€â”€â”€ MODAL CRÃ‰ATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal création *@
 @if (showCreation)
 {
     <div class="modal-overlay" @onclick="() => showCreation = false">
         <div class="modal" @onclick:stopPropagation>
             <div class="modal-header">
                 <h2>+ Nouvel utilisateur</h2>
-                <button class="btn-close" @onclick="() => showCreation = false">âœ•</button>
+                <button class="btn-close" @onclick="() => showCreation = false">✕</button>
             </div>
             <div class="modal-body">
                 <div class="form-grid">
                     <div class="field-group">
-                        <label class="field-label">PrÃ©nom</label>
+                        <label class="field-label">Prénom</label>
                         <input class="field-input" @bind="fPrenom" />
                     </div>
                     <div class="field-group">
@@ -154,11 +154,11 @@ else
                         <input class="field-input" type="password" @bind="fConfirmation" />
                     </div>
                     <div class="field-group col-span-2">
-                        <label class="field-label">RÃ´le *</label>
+                        <label class="field-label">Rôle *</label>
                         <select class="field-input" @bind="fRole">
                             @foreach (var r in roles)
                             {
-                                <option value="@r.Id">@r.Libelle â€” @r.Description</option>
+                                <option value="@r.Id">@r.Libelle - @r.Description</option>
                             }
                         </select>
                     </div>
@@ -179,61 +179,61 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showCreation = false">Annuler</button>
                 <button class="btn-primary" @onclick="CreerUtilisateur" disabled="@saving">
-                    @(saving ? "CrÃ©ationâ€¦" : "CrÃ©er")
+                    @(saving ? "Création..." : "Créer")
                 </button>
             </div>
         </div>
     </div>
 }
 
-@* â”€â”€â”€ MODAL MODIFICATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal modification *@
 @if (showModification && utilisateurEdite != null)
 {
     <div class="modal-overlay" @onclick="() => showModification = false">
         <div class="modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>âœŽ Modifier â€” @utilisateurEdite.Email</h2>
-                <button class="btn-close" @onclick="() => showModification = false">âœ•</button>
+                <h2>✎ Modifier - @utilisateurEdite.Email</h2>
+                <button class="btn-close" @onclick="() => showModification = false">✕</button>
             </div>
             <div class="modal-body">
                 <div class="form-grid">
                     <div class="field-group">
-                        <label class="field-label">PrÃ©nom</label>
-                        <input class="field-input" @bind="fPrenom" placeholder="PrÃ©nom" />
+                        <label class="field-label">Prénom</label>
+                        <input class="field-input" @bind="fPrenom" placeholder="Prénom" />
                     </div>
                     <div class="field-group">
                         <label class="field-label">Nom</label>
                         <input class="field-input" @bind="fNom" placeholder="Nom" />
                     </div>
 
-                    @* â”€â”€ Changement de rÃ´le â”€â”€ *@
+                    @* Changement de rôle *@
                     <div class="field-group col-span-2">
-                        <label class="field-label">RÃ´le *</label>
+                        <label class="field-label">Rôle *</label>
                         @if (fRole != utilisateurEdite.Role)
                         {
                             <div class="role-change-banner">
                                 <span class="badge @GetRoleBadgeCls(utilisateurEdite.Role)">@utilisateurEdite.RoleLibelle</span>
-                                <span class="role-change-arrow">â†’</span>
+                                <span class="role-change-arrow">→</span>
                                 <span class="badge @GetRoleBadgeCls(fRole)">@(roles.FirstOrDefault(r => r.Id == fRole)?.Libelle ?? "?")</span>
-                                <span class="role-change-note">Le rÃ´le sera modifiÃ©</span>
+                                <span class="role-change-note">Le rôle sera modifié</span>
                             </div>
                         }
                         <select class="field-input" @bind="fRole">
                             @foreach (var r in roles)
                             {
-                                <option value="@r.Id">@r.Libelle â€” @r.Description</option>
+                                <option value="@r.Id">@r.Libelle - @r.Description</option>
                             }
                         </select>
                     </div>
 
-                    @* â”€â”€ AperÃ§u des permissions du nouveau rÃ´le â”€â”€ *@
+                    @* Aperçu des permissions du nouveau rôle *@
                     @if (fRole > 0)
                     {
                         var rolePerms = roles.FirstOrDefault(r => r.Id == fRole)?.Permissions ?? Array.Empty<string>();
                         var ancienPerms = roles.FirstOrDefault(r => r.Id == utilisateurEdite.Role)?.Permissions ?? Array.Empty<string>();
                         <div class="field-group col-span-2">
                             <div class="role-preview">
-                                <span class="role-preview-label">Permissions du nouveau rÃ´le :</span>
+                                <span class="role-preview-label">Permissions du nouveau rôle :</span>
                                 @foreach (var p in rolePerms)
                                 {
                                     var gained = !ancienPerms.Contains(p);
@@ -262,21 +262,21 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showModification = false">Annuler</button>
                 <button class="btn-primary" @onclick="ModifierUtilisateur" disabled="@saving">
-                    @(saving ? "Enregistrementâ€¦" : "Modifier")
+                    @(saving ? "Enregistrement..." : "Modifier")
                 </button>
             </div>
         </div>
     </div>
 }
 
-@* â”€â”€â”€ MODAL RESET MDP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal reset mot de passe *@
 @if (showReset && utilisateurEdite != null)
 {
     <div class="modal-overlay" @onclick="() => showReset = false">
         <div class="modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>ðŸ”‘ Nouveau mot de passe â€” @utilisateurEdite.Email</h2>
-                <button class="btn-close" @onclick="() => showReset = false">âœ•</button>
+                <h2>Nouveau mot de passe - @utilisateurEdite.Email</h2>
+                <button class="btn-close" @onclick="() => showReset = false">✕</button>
             </div>
             <div class="modal-body">
                 <div class="field-group">
@@ -287,7 +287,7 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showReset = false">Annuler</button>
                 <button class="btn-primary" @onclick="ResetMotDePasse" disabled="@saving">
-                    @(saving ? "En coursâ€¦" : "RÃ©initialiser")
+                    @(saving ? "En cours..." : "Réinitialiser")
                 </button>
             </div>
         </div>
@@ -295,22 +295,22 @@ else
 }
 
 
-@* â”€â”€â”€ MODAL PERMISSIONS RÃ”LE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal permissions rôle *@
 @if (showPermRole && permRoleEdite != null)
 {
     <div class="modal-overlay" @onclick="() => showPermRole = false">
         <div class="modal modal-lg" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>ðŸ” Permissions â€” @permRoleEdite.Libelle</h2>
-                <button class="btn-close" @onclick="() => showPermRole = false">âœ•</button>
+                <h2>Permissions - @permRoleEdite.Libelle</h2>
+                <button class="btn-close" @onclick="() => showPermRole = false">✕</button>
             </div>
             <div class="modal-body">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
                     <p style="font-size:13px;color:var(--col-muted-l);margin:0">
-                        Cochez les permissions accordÃ©es Ã  ce rÃ´le. S'applique Ã  tous ses utilisateurs (sauf overrides individuels).
+                        Cochez les permissions accordées à ce rôle. S'applique à tous ses utilisateurs, sauf exceptions individuelles.
                     </p>
-                    <button class="btn-secondary" style="font-size:12px" @onclick="ResetPermRole" title="Revenir aux permissions par dÃ©faut">
-                        â†© DÃ©fauts
+                    <button class="btn-secondary" style="font-size:12px" @onclick="ResetPermRole" title="Revenir aux permissions par défaut">
+                        ↩ Défauts
                     </button>
                 </div>
                 <div class="perm-grid">
@@ -334,33 +334,33 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showPermRole = false">Annuler</button>
                 <button class="btn-primary" @onclick="SauvegarderPermRole" disabled="@saving">
-                    @(saving ? "Enregistrementâ€¦" : "Sauvegarder")
+                    @(saving ? "Enregistrement..." : "Sauvegarder")
                 </button>
             </div>
         </div>
     </div>
 }
 
-@* â”€â”€â”€ MODAL PERMISSIONS UTILISATEUR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal permissions utilisateur *@
 @if (showPermUser && utilisateurEdite != null)
 {
     <div class="modal-overlay" @onclick="() => showPermUser = false">
         <div class="modal modal-lg" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>ðŸ” Permissions â€” @utilisateurEdite.NomComplet</h2>
-                <button class="btn-close" @onclick="() => showPermUser = false">âœ•</button>
+                <h2>Permissions - @utilisateurEdite.NomComplet</h2>
+                <button class="btn-close" @onclick="() => showPermUser = false">✕</button>
             </div>
             <div class="modal-body">
                 @if (permUserDetail != null)
                 {
                     <div class="perm-user-header">
-                        <span>RÃ´le : <span class="badge @GetRoleBadgeCls(utilisateurEdite.Role)">@utilisateurEdite.RoleLibelle</span></span>
+                        <span>Rôle : <span class="badge @GetRoleBadgeCls(utilisateurEdite.Role)">@utilisateurEdite.RoleLibelle</span></span>
                         @if (permUserDetail.PermissionsUtilisateur != null)
                         {
-                            <span class="perm-override-badge">âš¡ Permissions personnalisÃ©es actives</span>
+                            <span class="perm-override-badge">Permissions personnalisées actives</span>
                         }
                         <button class="btn-secondary" style="margin-left:auto" @onclick="ResetPermUser">
-                            â†© RÃ©initialiser aux permissions du rÃ´le
+                            ↩ Réinitialiser aux permissions du rôle
                         </button>
                     </div>
                     <div class="perm-grid" style="margin-top:12px">
@@ -383,7 +383,7 @@ else
                         }
                     </div>
                     <p style="font-size:11px;color:var(--col-muted-l);margin-top:8px">
-                        Les cases grisÃ©es ne font pas partie du rÃ´le. Les cocher ajoute des permissions supplÃ©mentaires.
+                        Les cases grisées ne font pas partie du rôle. Les cocher ajoute des permissions supplémentaires.
                     </p>
                 }
                 else
@@ -394,7 +394,7 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showPermUser = false">Annuler</button>
                 <button class="btn-primary" @onclick="SauvegarderPermUser" disabled="@saving">
-                    @(saving ? "Enregistrementâ€¦" : "Sauvegarder")
+                    @(saving ? "Enregistrement..." : "Sauvegarder")
                 </button>
             </div>
         </div>
@@ -435,6 +435,14 @@ else
             Task.Run(async () => roles = await Api.GetRolesAsync() ?? new())
         );
         await tasks;
+        foreach (var role in roles)
+        {
+            role.Permissions = NormalizePermissions(role.Permissions).ToArray();
+        }
+        foreach (var utilisateur in utilisateurs)
+        {
+            utilisateur.Permissions = NormalizePermissions(utilisateur.Permissions).ToArray();
+        }
         chargement = false;
     }
 
@@ -442,6 +450,10 @@ else
     {
         chargement = true;
         utilisateurs = await Api.GetUtilisateursAsync() ?? new();
+        foreach (var utilisateur in utilisateurs)
+        {
+            utilisateur.Permissions = NormalizePermissions(utilisateur.Permissions).ToArray();
+        }
         chargement = false;
     }
 
@@ -473,7 +485,7 @@ else
     {
         if (!fEmail.Contains('@')) { message = "Email invalide."; msgCls = "alert-error"; return; }
         if (fMotDePasse.Length < 8) { message = "Mot de passe trop court."; msgCls = "alert-error"; return; }
-        if (fMotDePasse != fConfirmation) { message = "Mots de passe diffÃ©rents."; msgCls = "alert-error"; return; }
+        if (fMotDePasse != fConfirmation) { message = "Mots de passe différents."; msgCls = "alert-error"; return; }
         saving = true;
         var r = await Api.CreerUtilisateurAsync(new UtilisateurRequest
         {
@@ -549,7 +561,7 @@ else
     private void OuvrirPermissionsRole(RoleDto role)
     {
         permRoleEdite = role;
-        permRoleSelections = new HashSet<string>(role.Permissions);
+        permRoleSelections = new HashSet<string>(NormalizePermissions(role.Permissions));
         showPermRole = true;
     }
 
@@ -560,7 +572,7 @@ else
         showPermUser = true;
         var detail = await Api.GetPermissionsUtilisateurAsync(u.Id);
         permUserDetail = detail;
-        var effectives = detail?.PermissionsUtilisateur ?? detail?.PermissionsRole ?? Array.Empty<string>();
+        var effectives = NormalizePermissions(detail?.PermissionsUtilisateur ?? detail?.PermissionsRole ?? Array.Empty<string>());
         permUserSelections = new HashSet<string>(effectives);
     }
 
@@ -583,7 +595,7 @@ else
         };
         if (defaults.TryGetValue(permRoleEdite.Id, out var def))
             permRoleSelections = new HashSet<string>(def);
-        message = "Permissions rÃ©initialisÃ©es aux valeurs par dÃ©faut. Cliquez Sauvegarder pour confirmer.";
+            message = "Permissions réinitialisées aux valeurs par défaut. Cliquez Sauvegarder pour confirmer.";
         msgCls = "alert-warn";
     }
 
@@ -643,7 +655,7 @@ else
                 "mouvements" => "Mouvements", "fournisseurs" => "Fournisseurs",
                 "commandes" => "Commandes", "rapports" => "Rapports",
                 "inventaire" => "Inventaire", "utilisateurs" => "Utilisateurs",
-                "parametres" => "ParamÃ¨tres", "tracabilite" => "TraÃ§abilitÃ©",
+                "parametres" => "Paramètres", "tracabilite" => "Traçabilité",
                 _ => module };
             if (!groups.ContainsKey(label)) groups[label] = new();
             groups[label].Add(p);
@@ -652,8 +664,8 @@ else
     }
 
     private string FormatPermAction(string p) => p.Split('.').Length > 1 ? p.Split('.')[1] switch {
-        "lire" => "Lire", "ecrire" => "Ã‰crire / Modifier",
-        "gerer" => "GÃ©rer", "saisir" => "Saisir",
+        "lire" => "Lire", "ecrire" => "Écrire / Modifier",
+        "gerer" => "Gérer", "saisir" => "Saisir",
         "valider" => "Valider", _ => p.Split('.')[1] } : p;
 
     private string FormatPerm(string p)
@@ -661,13 +673,37 @@ else
         var parts = p.Split('.');
         if (parts.Length < 2) return p;
         return parts[1] switch {
-            "lire" => "ðŸ“– " + parts[0],
-            "ecrire" => "âœ " + parts[0],
-            "gerer" => "âš™ " + parts[0],
-            "saisir" => "ðŸ“ " + parts[0],
-            "valider" => "âœ“ " + parts[0],
+            "lire" => "Lire " + parts[0],
+            "ecrire" => "Écrire " + parts[0],
+            "gerer" => "Gérer " + parts[0],
+            "saisir" => "Saisir " + parts[0],
+            "valider" => "Valider " + parts[0],
             _ => p
         };
+    }
+
+    private static IEnumerable<string> NormalizePermissions(IEnumerable<string> perms) =>
+        perms
+            .SelectMany(ParsePermissionChunk)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> ParsePermissionChunk(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            yield break;
+
+        var cleaned = raw.Trim()
+            .Trim('[', ']')
+            .Replace("\"", string.Empty)
+            .Replace("'", string.Empty);
+
+        foreach (var part in cleaned.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!string.IsNullOrWhiteSpace(part))
+                yield return part;
+        }
     }
 }
 

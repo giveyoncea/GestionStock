@@ -1,24 +1,36 @@
-﻿@page "/articles"
+@page "/articles"
 @attribute [Authorize]
 @inject IApiService Api
-@inject ICurrencyService Devise
+@inject NavigationManager Nav
 
-<PageTitle>Articles â€“ GestionStock</PageTitle>
+<PageTitle>Articles - GestionStock</PageTitle>
 
 <div class="page-header">
-    <h1 class="page-title">Articles</h1>
-    <button class="btn-primary" @onclick="OuvrirCreation">+ Nouvel article</button>
+    <div>
+        <h1 class="page-title">Articles</h1>
+        <p class="page-subtitle">Pilotez votre catalogue, reperez plus vite les references sensibles et gardez une lecture simple des niveaux de stock.</p>
+    </div>
+    <button class="btn btn-primary" @onclick="AllerCreation">+ Nouvel article</button>
 </div>
 
-@if (!string.IsNullOrEmpty(message))
-{
-    <div class="@msgCls">@message</div>
-}
+<section class="surface-hero surface-hero--compact">
+    <div class="surface-hero-copy">
+        <span class="surface-hero-eyebrow">Catalogue produit</span>
+        <h2>Une vue plus lisible des references, familles et modes de suivi</h2>
+        <p>Les informations cles sont mieux regroupees pour faciliter la consultation, la creation et la maintenance des articles, y compris les prestations sans stock.</p>
+    </div>
+    <div class="surface-hero-pills">
+        <span class="surface-pill">References</span>
+        <span class="surface-pill">Familles</span>
+        <span class="surface-pill">Seuils</span>
+        <span class="surface-pill">Disponibilites</span>
+    </div>
+</section>
 
 <div class="toolbar">
     <div class="search-box">
-        <span class="search-icon">ðŸ”</span>
-        <input class="search-input" type="text" placeholder="Code, dÃ©signationâ€¦"
+        <span class="search-icon">🔍</span>
+        <input class="search-input" type="text" placeholder="Code, designation..."
                @bind="recherche" @bind:event="oninput" @onkeyup="OnKey" />
     </div>
     <div class="toolbar-right">
@@ -37,13 +49,14 @@ else
             <thead>
                 <tr>
                     <th>Code</th>
-                    <th>DÃ©signation</th>
-                    <th>CatÃ©gorie / Famille</th>
+                    <th>Designation</th>
+                    <th>Categorie / Famille</th>
+                    <th>Suivi</th>
                     <th class="text-right">Seuil</th>
                     <th class="text-right">Stock min</th>
                     <th class="text-right">Stock max</th>
                     <th class="text-right">En stock</th>
-                    <th>Ã‰tat</th>
+                    <th>Etat</th>
                     <th></th>
                 </tr>
             </thead>
@@ -69,14 +82,19 @@ else
                                 <div class="cell-sub text-muted">@art.FamilleArticle</div>
                             }
                         </td>
-                        <td class="text-right mono">@art.SeuilAlerte</td>
-                        <td class="text-right mono">@art.StockMinimum</td>
-                        <td class="text-right mono text-muted">@(art.StockMaximum == 0 ? "âˆž" : art.StockMaximum.ToString())</td>
-                        <td class="text-right mono @GetQtyCls(art)">@art.QuantiteTotale</td>
+                        <td>
+                            <span class="badge @(art.SansSuiviStock ? "badge-gray" : "badge-blue")">
+                                @(art.SansSuiviStock ? "Sans suivi" : "Avec suivi")
+                            </span>
+                        </td>
+                        <td class="text-right mono">@(art.SansSuiviStock ? "—" : art.SeuilAlerte)</td>
+                        <td class="text-right mono">@(art.SansSuiviStock ? "—" : art.StockMinimum)</td>
+                        <td class="text-right mono text-muted">@(art.SansSuiviStock ? "—" : art.StockMaximum == 0 ? "∞" : art.StockMaximum.ToString())</td>
+                        <td class="text-right mono @GetQtyCls(art)">@GetStockDisplay(art)</td>
                         <td><span class="badge @GetStatutCls(art)">@GetStatutLib(art)</span></td>
                         <td class="actions-cell">
                             <div class="row-actions">
-                                <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick="() => OuvrirModification(art)">Modifier</button>
+                                <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick="() => AllerModification(art.Id)">Modifier</button>
                             </div>
                         </td>
                     </tr>
@@ -85,197 +103,39 @@ else
         </table>
     </div>
     <div class="pagination">
-        <button class="btn-page" disabled="@(currentPage <= 1)" @onclick="() => ChangePage(currentPage - 1)">â†</button>
+        <button class="btn-page" disabled="@(currentPage <= 1)" @onclick="() => ChangePage(currentPage - 1)">←</button>
         <span class="page-info">Page @currentPage / @totalPages</span>
-        <button class="btn-page" disabled="@(currentPage >= totalPages)" @onclick="() => ChangePage(currentPage + 1)">â†’</button>
-    </div>
-}
-
-@* â”€â”€â”€ MODAL CRÃ‰ATION / MODIFICATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
-@if (showModal)
-{
-    <div class="modal-overlay" @onclick="FermerModal">
-        <div class="modal modal-lg" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h2>@(editId == null ? "Nouvel article" : "Modifier l'article")</h2>
-                <button class="btn-close" @onclick="FermerModal">âœ•</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-grid">
-
-                    @* â”€â”€ IdentitÃ© â”€â”€ *@
-                    <div class="form-section-title col-span-2">IdentitÃ©</div>
-                    <div class="field-group">
-                        <label class="field-label">Code *</label>
-                        <input class="field-input" @bind="fCode" placeholder="ART-001"
-                               disabled="@(editId != null)" />
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Code-barres</label>
-                        <input class="field-input" @bind="fCodeBarres" />
-                    </div>
-                    <div class="field-group col-span-2">
-                        <label class="field-label">DÃ©signation *</label>
-                        <input class="field-input" @bind="fDesignation" />
-                    </div>
-                    <div class="field-group col-span-2">
-                        <label class="field-label">Description</label>
-                        <input class="field-input" @bind="fDescription" />
-                    </div>
-
-                    @* â”€â”€ Classification â”€â”€ *@
-                    <div class="form-section-title col-span-2">Classification</div>
-                    <div class="field-group">
-                        <label class="field-label">CatÃ©gorie</label>
-                        <select class="field-input" @bind="fCategorie">
-                            <option value="">â€” Aucune â€”</option>
-                            @foreach (var cat in categories)
-                            {
-                                <option value="@cat.Libelle">@cat.Libelle</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">UnitÃ©</label>
-                        <input class="field-input" @bind="fUnite" placeholder="PCS" />
-                    </div>
-
-                    @* Famille + Sous-famille sur toute la largeur *@
-                    <div class="field-group col-span-2">
-                        <label class="field-label">Famille d'articles</label>
-                        <div class="famille-picker">
-                            @* Familles parentes *@
-                            <select class="field-input" @bind="fFamilleParentId" @bind:after="OnFamilleParentChanged">
-                                <option value="">â€” Aucune famille â€”</option>
-                                @foreach (var f in FamillesRacines)
-                                {
-                                    <option value="@f.Id">@f.Libelle</option>
-                                }
-                            </select>
-                            @* Sous-familles (si la famille sÃ©lectionnÃ©e a des enfants) *@
-                            @if (SousFamillesDuParent.Any())
-                            {
-                                <select class="field-input" @bind="fSousFamilleId" @bind:after="OnSousFamilleChanged">
-                                    <option value="">â€” Toute la famille (pas de sous-famille) â€”</option>
-                                    @foreach (var sf in SousFamillesDuParent)
-                                    {
-                                        <option value="@sf.Id">@sf.Libelle</option>
-                                    }
-                                </select>
-                            }
-                            @if (!string.IsNullOrEmpty(fFamille))
-                            {
-                                <div class="famille-selected">
-                                    âœ“ <strong>@fFamille</strong>
-                                </div>
-                            }
-                        </div>
-                    </div>
-
-                    @* â”€â”€ Tarification â”€â”€ *@
-                    <div class="form-section-title col-span-2">Tarification</div>
-                    <div class="field-group">
-                        <label class="field-label">@($"Prix achat ({Devise.Symbol})")</label>
-                        <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fPrixAchat" />
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">@($"Prix vente ({Devise.Symbol})")</label>
-                        <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fPrixVente" />
-                    </div>
-
-                    @* â”€â”€ Seuils â”€â”€ *@
-                    <div class="form-section-title col-span-2">Seuils de stock</div>
-                    <div class="field-group">
-                        <label class="field-label">Seuil alerte</label>
-                        <input class="field-input" type="number" min="0" @bind="fSeuil" />
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Stock minimum</label>
-                        <input class="field-input" type="number" min="0" @bind="fStockMin" />
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Stock maximum <span class="field-hint">(0 = illimitÃ©)</span></label>
-                        <input class="field-input" type="number" min="0" @bind="fStockMax" />
-                        @if (fStockMax > 0 && fStockMax <= fStockMin)
-                        {
-                            <span class="field-error">âš  Doit Ãªtre supÃ©rieur au stock minimum (@fStockMin)</span>
-                        }
-                    </div>
-                    <div class="field-group field-checks">
-                        <label class="check-label">
-                            <input type="checkbox" @bind="fGestionLot" /> Gestion par lot
-                        </label>
-                        <label class="check-label">
-                            <input type="checkbox" @bind="fGestionDLUO" /> Gestion DLUO/DLC
-                        </label>
-                    </div>
-
-                </div>
-            </div>
-            <div class="modal-footer">
-                @if (editId != null)
-                {
-                    <button class="btn-danger-outline" @onclick="DesactiverArticle" disabled="@saving">
-                        DÃ©sactiver
-                    </button>
-                }
-                <button class="btn-secondary" @onclick="FermerModal">Annuler</button>
-                <button class="btn-primary" @onclick="Sauvegarder" disabled="@saving">
-                    @(saving ? "Enregistrementâ€¦" : editId == null ? "CrÃ©er" : "Modifier")
-                </button>
-            </div>
-        </div>
+        <button class="btn-page" disabled="@(currentPage >= totalPages)" @onclick="() => ChangePage(currentPage + 1)">→</button>
     </div>
 }
 
 @code {
     private List<ArticleDto> articles = new();
-    private int currentPage = 1, totalPages = 1, total = 0;
-    private bool chargement = true, showModal = false, saving = false;
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int total;
+    private bool chargement = true;
     private string recherche = "";
-    private string? message;
-    private string msgCls = "alert-success";
-
-    private Guid? editId;
-
-    // Champs formulaire
-    private string fCode = "", fCodeBarres = "", fDesignation = "", fDescription = "";
-    private string fCategorie = "", fFamille = "", fUnite = "PCS";
-    private decimal fPrixAchat = 0, fPrixVente = 0;
-    private int fSeuil = 5, fStockMin = 0, fStockMax = 100;
-    private bool fGestionLot = false, fGestionDLUO = false;
-
-    // Famille picker
-    private string fFamilleParentId = "";
-    private string fSousFamilleId = "";
-
-    private List<FamilleArticleDto> familles = new();
-    private List<CategorieDto> categories = new();
     private System.Threading.Timer? _timer;
-
-    // Familles racines (sans parent)
-    private IEnumerable<FamilleArticleDto> FamillesRacines =>
-        familles.Where(f => f.ParentId == null && f.EstActif);
-
-    // Sous-familles du parent sÃ©lectionnÃ©
-    private IEnumerable<FamilleArticleDto> SousFamillesDuParent =>
-        string.IsNullOrEmpty(fFamilleParentId) ? Enumerable.Empty<FamilleArticleDto>()
-        : familles.Where(f => f.ParentId.HasValue && f.ParentId.Value.ToString() == fFamilleParentId && f.EstActif);
 
     protected override async Task OnInitializedAsync()
     {
-        await Devise.EnsureLoadedAsync();
         await Load();
-        familles = await Api.GetFamillesAsync() ?? new();
-        categories = await Api.GetCategoriesAsync() ?? new();
     }
 
     private void OnKey(KeyboardEventArgs _)
     {
         _timer?.Dispose();
         _timer = new System.Threading.Timer(async _ =>
-            await InvokeAsync(async () => { currentPage = 1; await Load(); StateHasChanged(); }),
-            null, 400, System.Threading.Timeout.Infinite);
+            await InvokeAsync(async () =>
+            {
+                currentPage = 1;
+                await Load();
+                StateHasChanged();
+            }),
+            null,
+            400,
+            System.Threading.Timeout.Infinite);
     }
 
     private async Task Load()
@@ -288,144 +148,30 @@ else
         chargement = false;
     }
 
-    private async Task ChangePage(int p) { currentPage = p; await Load(); }
-
-    private void OuvrirCreation()
+    private async Task ChangePage(int p)
     {
-        editId = null;
-        fCode = fCodeBarres = fDesignation = fDescription = fCategorie = fFamille = "";
-        fUnite = "PCS"; fPrixAchat = NormalizeAmount(0); fPrixVente = NormalizeAmount(0);
-        fSeuil = 5; fStockMin = 0; fStockMax = 100;
-        fGestionLot = fGestionDLUO = false;
-        fFamilleParentId = fSousFamilleId = "";
-        message = null;
-        showModal = true;
+        currentPage = p;
+        await Load();
     }
 
-    private void OuvrirModification(ArticleDto art)
-    {
-        editId = art.Id;
-        fCode = art.Code; fCodeBarres = art.CodeBarres;
-        fDesignation = art.Designation; fDescription = art.Description;
-        fCategorie = art.Categorie; fFamille = art.FamilleArticle;
-        fUnite = art.Unite; fPrixAchat = NormalizeAmount(art.PrixAchat); fPrixVente = NormalizeAmount(art.PrixVente);
-        fSeuil = art.SeuilAlerte; fStockMin = art.StockMinimum; fStockMax = art.StockMaximum;
-        fGestionLot = art.GestionLot; fGestionDLUO = art.GestionDLUO;
+    private void AllerCreation()
+        => Nav.NavigateTo("/articles/nouveau");
 
-        // PrÃ©-sÃ©lectionner la famille dans les dropdowns
-        fFamilleParentId = "";
-        fSousFamilleId = "";
-        if (!string.IsNullOrEmpty(fFamille))
-        {
-            // Chercher si c'est une sous-famille
-            var sf = familles.FirstOrDefault(f => f.Libelle == fFamille && f.ParentId != null);
-            if (sf != null)
-            {
-                fFamilleParentId = sf.ParentId!.Value.ToString();
-                fSousFamilleId = sf.Id.ToString();
-            }
-            else
-            {
-                // C'est une famille racine
-                var parent = familles.FirstOrDefault(f => f.Libelle == fFamille && f.ParentId == null);
-                if (parent != null) fFamilleParentId = parent.Id.ToString();
-            }
-        }
-
-        message = null;
-        showModal = true;
-    }
-
-    private void FermerModal() => showModal = false;
-
-    private void OnFamilleParentChanged()
-    {
-        fSousFamilleId = "";
-        // Mettre Ã  jour fFamille avec le libellÃ© du parent
-        if (string.IsNullOrEmpty(fFamilleParentId))
-        {
-            fFamille = "";
-        }
-        else
-        {
-            var parent = familles.FirstOrDefault(f => f.Id.ToString() == fFamilleParentId);
-            fFamille = parent?.Libelle ?? "";
-        }
-    }
-
-    private void OnSousFamilleChanged()
-    {
-        if (string.IsNullOrEmpty(fSousFamilleId))
-        {
-            // Revenir au libellÃ© du parent
-            var parent = familles.FirstOrDefault(f => f.Id.ToString() == fFamilleParentId);
-            fFamille = parent?.Libelle ?? "";
-        }
-        else
-        {
-            var sf = familles.FirstOrDefault(f => f.Id.ToString() == fSousFamilleId);
-            fFamille = sf?.Libelle ?? "";
-        }
-    }
-
-    private async Task Sauvegarder()
-    {
-        if (string.IsNullOrWhiteSpace(fCode) || string.IsNullOrWhiteSpace(fDesignation))
-        {
-            message = "Le code et la dÃ©signation sont obligatoires.";
-            msgCls = "alert-error";
-            return;
-        }
-        if (fStockMax > 0 && fStockMax <= fStockMin)
-        {
-            message = "Le stock maximum doit Ãªtre supÃ©rieur au stock minimum.";
-            msgCls = "alert-error";
-            return;
-        }
-        saving = true;
-        fPrixAchat = NormalizeAmount(fPrixAchat);
-        fPrixVente = NormalizeAmount(fPrixVente);
-        ResultDto? r;
-        if (editId == null)
-        {
-            r = await Api.CreerArticleAsync(new CreerArticleDto(
-                fCode, fCodeBarres, fDesignation, fDescription,
-                fCategorie, fFamille, fUnite, fPrixAchat, fPrixVente,
-                fSeuil, fStockMin, fStockMax, fGestionLot, fGestionDLUO, null));
-        }
-        else
-        {
-            r = await Api.ModifierArticleAsync(editId.Value, new ModifierArticleDto(
-                editId.Value, fDesignation, fDescription,
-                fCategorie, fFamille, fUnite, fPrixAchat, fPrixVente,
-                fSeuil, fStockMin, fStockMax, fGestionLot, fGestionDLUO, null));
-        }
-        saving = false;
-        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
-        message = r?.Message;
-        if (r?.Succes == true) { showModal = false; await Load(); }
-    }
-
-    private async Task DesactiverArticle()
-    {
-        if (editId == null) return;
-        saving = true;
-        var r = await Api.DesactiverArticleAsync(editId.Value);
-        saving = false;
-        msgCls = r?.Succes == true ? "alert-success" : "alert-error";
-        message = r?.Message;
-        if (r?.Succes == true) { showModal = false; await Load(); }
-    }
+    private void AllerModification(Guid id)
+        => Nav.NavigateTo($"/articles/modifier/{id}");
 
     private string GetRowCls(ArticleDto a) =>
-        a.EstEnRupture ? "row-danger" : a.EstEnAlerte ? "row-warn" : "";
-    private string GetQtyCls(ArticleDto a) =>
-        a.EstEnRupture ? "text-danger mono" : a.EstEnAlerte ? "text-warn mono" : "mono";
-    private decimal NormalizeAmount(decimal value) =>
-        Math.Round(value, Devise.AmountDecimals, MidpointRounding.AwayFromZero);
-    private string GetStatutLib(ArticleDto a) =>
-        a.EstEnRupture ? "Rupture" : a.EstEnAlerte ? "Alerte" : "OK";
-    private string GetStatutCls(ArticleDto a) =>
-        a.EstEnRupture ? "badge-red" : a.EstEnAlerte ? "badge-amber" : "badge-green";
-}
+        a.SansSuiviStock ? string.Empty : a.EstEnRupture ? "row-danger" : a.EstEnAlerte ? "row-warn" : string.Empty;
 
+    private string GetQtyCls(ArticleDto a) =>
+        a.SansSuiviStock ? "text-muted mono" : a.EstEnRupture ? "text-danger mono" : a.EstEnAlerte ? "text-warn mono" : "mono";
+
+    private string GetStatutLib(ArticleDto a) =>
+        a.SansSuiviStock ? "Sans suivi" : a.EstEnRupture ? "Rupture" : a.EstEnAlerte ? "Alerte" : "OK";
+
+    private string GetStatutCls(ArticleDto a) =>
+        a.SansSuiviStock ? "badge-gray" : a.EstEnRupture ? "badge-red" : a.EstEnAlerte ? "badge-amber" : "badge-green";
+
+    private string GetStockDisplay(ArticleDto a)
+        => a.SansSuiviStock ? "—" : a.QuantiteTotale.ToString();
+}

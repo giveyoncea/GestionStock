@@ -6,12 +6,17 @@ public interface IApiService
 {
     Task<DashboardDto?> GetDashboardAsync();
     Task<PagedResult<ArticleDto>?> GetArticlesAsync(int page = 1, int pageSize = 20, string? search = null, string? categorie = null);
+    Task<ArticleDto?> GetArticleAsync(Guid id);
     Task<IEnumerable<AlerteStockDto>?> GetArticlesEnAlerteAsync();
     Task<ResultDto?> CreerArticleAsync(CreerArticleDto dto);
     Task<ResultDto?> ModifierArticleAsync(Guid id, ModifierArticleDto dto);
     Task<ResultDto?> DesactiverArticleAsync(Guid id);
     Task<IEnumerable<StockResumeDto>?> GetStocksResumeAsync();
     Task<IEnumerable<MouvementStockDto>?> GetMouvementsAsync(Guid? articleId = null, DateTime? du = null, DateTime? au = null);
+    Task<IEnumerable<DocumentStockDto>?> GetDocumentsStockAsync(DateTime? du = null, DateTime? au = null, int? type = null, string? q = null);
+    Task<DocumentStockDto?> GetDocumentStockAsync(Guid id);
+    Task<ResultDto?> ValiderDocumentStockAsync(Guid id);
+    Task<ResultDto?> CreerDocumentEntreeStockAsync(DocumentEntreeStockRequest dto);
     Task<ResultDto?> EntreeStockAsync(EntreeStockDto dto);
     Task<ResultDto?> SortieStockAsync(SortieStockDto dto);
     Task<PagedResult<FournisseurDto>?> GetFournisseursAsync(int page = 1, int pageSize = 20, string? search = null);

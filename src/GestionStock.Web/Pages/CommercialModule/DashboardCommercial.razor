@@ -9,10 +9,10 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Gestion Commerciale</h1>
-        <p class="page-date">Tableau de bord du module commercial</p>
+        <p class="page-subtitle">Suivez l'activité commerciale, les encours et les accès rapides depuis un tableau de bord plus lisible.</p>
     </div>
     <div class="header-actions">
-        <button class="btn-primary" @onclick="AllerVersVentes">+ Nouveau document</button>
+        <button class="btn btn-primary" @onclick="AllerVersVentes">+ Nouveau document</button>
     </div>
 </div>
 
@@ -30,6 +30,20 @@
 }
 else if (dash != null)
 {
+    <section class="surface-hero surface-hero--commercial">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Vue d'ensemble</span>
+            <h2>Une lecture simple de l'activité commerciale</h2>
+            <p>Suivez les ventes, les encours et les actions prioritaires sans naviguer entre plusieurs écrans.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Ventes</span>
+            <span class="surface-pill">Achats</span>
+            <span class="surface-pill">Clients</span>
+            <span class="surface-pill">Fournisseurs</span>
+        </div>
+    </section>
+
     <div class="stat-cards-grid" style="margin-top:16px">
         <div class="stat-card stat-card--blue">
             <div class="stat-icon">C</div>
@@ -70,7 +84,7 @@ else if (dash != null)
         </button>
         <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/achats")'>
             <span class="feature-card-title">Achats</span>
-            <span class="feature-card-subtitle">Demandes, commandes, receptions, factures</span>
+            <span class="feature-card-subtitle">Demandes, commandes, réceptions, factures</span>
         </button>
         <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/clients")'>
             <span class="feature-card-title">Clients</span>
@@ -78,7 +92,7 @@ else if (dash != null)
         </button>
         <button class="feature-card" @onclick='() => Nav.NavigateTo("/commercial/fournisseurs")'>
             <span class="feature-card-title">Fournisseurs</span>
-            <span class="feature-card-subtitle">Referentiel fournisseurs et suivi achats</span>
+            <span class="feature-card-subtitle">Référentiel fournisseurs et suivi achats</span>
         </button>
     </div>
 }
@@ -86,6 +100,7 @@ else if (dash != null)
 @code {
     private CommercialDashboardDto? dash;
     private bool chargement = true;
+
     protected override async Task OnInitializedAsync()
     {
         await Devise.EnsureLoadedAsync();

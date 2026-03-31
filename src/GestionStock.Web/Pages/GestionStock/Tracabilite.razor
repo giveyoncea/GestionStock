@@ -259,7 +259,7 @@
                             <thead><tr>
                                 <th>Date</th><th>Type</th><th class="text-right">QtÃ©</th>
                                 <th class="text-right">Valeur</th><th>Emplacement</th>
-                                <th>RÃ©fÃ©rence</th><th>OpÃ©rateur</th>
+                                <th>N° série</th><th>RÃ©fÃ©rence</th><th>OpÃ©rateur</th>
                             </tr></thead>
                             <tbody>
                             @foreach (var m in mouvementsLot)
@@ -276,6 +276,7 @@
                                         @if (!string.IsNullOrEmpty(m.EmplacementDestination))
                                         { <span>â†’ @m.EmplacementDestination</span> }
                                     </td>
+                                    <td class="small text-muted">@(string.IsNullOrEmpty(m.NumeroSerie) ? "â€”" : m.NumeroSerie)</td>
                                     <td class="small text-muted">@(m.Reference ?? m.Motif)</td>
                                     <td class="small text-muted">@m.CreatedBy</td>
                                 </tr>

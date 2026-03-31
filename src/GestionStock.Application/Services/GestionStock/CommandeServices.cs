@@ -245,7 +245,7 @@ public class DashboardService : IDashboardService
                 m.EmplacementSource?.Code ?? "", null,
                 m.TypeMouvement, m.TypeMouvement.ToString(),
                 m.Quantite, m.ValeurUnitaire, m.ValeurTotale,
-                m.Reference, m.Motif, null, m.DateMouvement, m.CreatedBy)).ToList(),
+                m.Reference, m.Motif, null, null, m.DateMouvement, m.CreatedBy)).ToList(),
             commandesEnAttente.Take(5).ToList());
     }
 }

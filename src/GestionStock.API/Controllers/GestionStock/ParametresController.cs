@@ -70,6 +70,7 @@ public class ParametresController : ControllerBase
                 dto.NombreDecimalesQuantite = reader["NombreDecimalesQuantite"] is DBNull ? 3 : Convert.ToInt32(reader["NombreDecimalesQuantite"]);
                 dto.TauxTVA = reader["TauxTVA"] is DBNull ? 20m : Convert.ToDecimal(reader["TauxTVA"]);
                 dto.DelaiAlerteDLUO = reader["DelaiAlerteDLUO"] is DBNull ? 30 : Convert.ToInt32(reader["DelaiAlerteDLUO"]);
+                dto.AutoriserStockNegatif = reader["AutoriserStockNegatif"] is not DBNull && Convert.ToBoolean(reader["AutoriserStockNegatif"]);
                 dto.AlerteMailActif = reader["AlerteMailActif"] is not DBNull && Convert.ToBoolean(reader["AlerteMailActif"]);
                 dto.PrefixeCA = reader["PrefixeCA"]?.ToString() ?? "CA";
                 dto.PrefixeArt = reader["PrefixeArt"]?.ToString() ?? "ART";
@@ -178,10 +179,10 @@ public class ParametresController : ControllerBase
                     FormatPapierDocuments=@v18, ImprimanteDocumentsDefaut=@v19,
                     FormatPapierRecus=@v20, ImprimanteRecusDefaut=@v21, Devise=@v22,
                     SymboleDevise=@v23, NombreDecimalesMontant=@v24, NombreDecimalesQuantite=@v25,
-                    TauxTVA=@v26, DelaiAlerteDLUO=@v27, AlerteMailActif=@v28,
-                    PrefixeCA=@v29, PrefixeArt=@v30,
-                    PrefixeLot=@v31, PrefixeInv=@v32, Banque=@v33, Iban=@v34, Bic=@v35,
-                    DelaiPaiement=@v36, UpdatedAt=@v37, UpdatedBy=@v38
+                    TauxTVA=@v26, DelaiAlerteDLUO=@v27, AutoriserStockNegatif=@v28, AlerteMailActif=@v29,
+                    PrefixeCA=@v30, PrefixeArt=@v31,
+                    PrefixeLot=@v32, PrefixeInv=@v33, Banque=@v34, Iban=@v35, Bic=@v36,
+                    DelaiPaiement=@v37, UpdatedAt=@v38, UpdatedBy=@v39
                     WHERE Id=1"
                 : @"INSERT INTO Parametres (Id,
                     RaisonSociale, Siret, NumTVA, Telephone, Email, SiteWeb, FormeJuridique,
@@ -190,12 +191,12 @@ public class ParametresController : ControllerBase
                     FormatPapierDocuments, ImprimanteDocumentsDefaut, FormatPapierRecus, ImprimanteRecusDefaut,
                     Devise, SymboleDevise,
                     NombreDecimalesMontant, NombreDecimalesQuantite, TauxTVA,
-                    DelaiAlerteDLUO, AlerteMailActif,
+                    DelaiAlerteDLUO, AutoriserStockNegatif, AlerteMailActif,
                     PrefixeCA, PrefixeArt, PrefixeLot, PrefixeInv,
                     Banque, Iban, Bic, DelaiPaiement, UpdatedAt, UpdatedBy)
                     VALUES (1,
                     @v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13,@v14,@v15,@v16,@v17,@v18,@v19,@v20,@v21,@v22,@v23,
-                    @v24,@v25,@v26,@v27,@v28,@v29,@v30,@v31,@v32,@v33,@v34,@v35,@v36,@v37,@v38)";
+                    @v24,@v25,@v26,@v27,@v28,@v29,@v30,@v31,@v32,@v33,@v34,@v35,@v36,@v37,@v38,@v39)";
 
             await using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@v1",  dto.RaisonSociale);
@@ -225,17 +226,18 @@ public class ParametresController : ControllerBase
             cmd.Parameters.AddWithValue("@v25", dto.NombreDecimalesQuantite);
             cmd.Parameters.AddWithValue("@v26", dto.TauxTVA);
             cmd.Parameters.AddWithValue("@v27", dto.DelaiAlerteDLUO);
-            cmd.Parameters.AddWithValue("@v28", dto.AlerteMailActif);
-            cmd.Parameters.AddWithValue("@v29", dto.PrefixeCA);
-            cmd.Parameters.AddWithValue("@v30", dto.PrefixeArt);
-            cmd.Parameters.AddWithValue("@v31", dto.PrefixeLot);
-            cmd.Parameters.AddWithValue("@v32", dto.PrefixeInv);
-            cmd.Parameters.AddWithValue("@v33", dto.Banque);
-            cmd.Parameters.AddWithValue("@v34", dto.Iban);
-            cmd.Parameters.AddWithValue("@v35", dto.Bic);
-            cmd.Parameters.AddWithValue("@v36", dto.DelaiPaiement);
-            cmd.Parameters.AddWithValue("@v37", DateTime.UtcNow);
-            cmd.Parameters.AddWithValue("@v38", UserId);
+            cmd.Parameters.AddWithValue("@v28", dto.AutoriserStockNegatif);
+            cmd.Parameters.AddWithValue("@v29", dto.AlerteMailActif);
+            cmd.Parameters.AddWithValue("@v30", dto.PrefixeCA);
+            cmd.Parameters.AddWithValue("@v31", dto.PrefixeArt);
+            cmd.Parameters.AddWithValue("@v32", dto.PrefixeLot);
+            cmd.Parameters.AddWithValue("@v33", dto.PrefixeInv);
+            cmd.Parameters.AddWithValue("@v34", dto.Banque);
+            cmd.Parameters.AddWithValue("@v35", dto.Iban);
+            cmd.Parameters.AddWithValue("@v36", dto.Bic);
+            cmd.Parameters.AddWithValue("@v37", dto.DelaiPaiement);
+            cmd.Parameters.AddWithValue("@v38", DateTime.UtcNow);
+            cmd.Parameters.AddWithValue("@v39", UserId);
 
             await cmd.ExecuteNonQueryAsync();
             return Ok(new { succes = true, message = "Paramètres enregistrés avec succès." });

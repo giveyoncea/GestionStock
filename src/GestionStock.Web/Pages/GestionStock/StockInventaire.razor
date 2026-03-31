@@ -1,0 +1,217 @@
+@page "/stocks/inventaire"
+@attribute [Authorize]
+@inject IApiService Api
+@inject NavigationManager Nav
+
+<PageTitle>Inventaire de stock - GestionStock</PageTitle>
+
+<div class="stock-operation-page stock-inventory-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Inventaire</h1>
+            <p class="page-subtitle">Saisissez les quantites reelles et validez les ajustements depuis une page dediee.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux stocks</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact stock-operation-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Controle physique</span>
+            <h2>Comparez le theorique et le compte pour fiabiliser votre stock.</h2>
+            <p>Seules les lignes modifiees seront ajustees lors de la validation.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Theorique</span>
+            <span class="surface-pill">Compte</span>
+            <span class="surface-pill">Ecart</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <div class="editor-card">
+            <div class="editor-section">
+                <div class="form-section-title">Filtres</div>
+                <div class="editor-grid">
+                    <div class="field-group">
+                        <label class="field-label">Rechercher un article</label>
+                        <input class="field-input" type="text" @bind="rechercheInv" @bind:event="oninput" placeholder="Code, designation..." />
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Emplacement</label>
+                        <select class="field-input" @bind="emplacementInvId">
+                            <option value="@Guid.Empty">Tous les emplacements</option>
+                            @foreach (var e in emplacements)
+                            {
+                                <option value="@e.Id">[@e.Zone] @e.Code</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="editor-section">
+                <div class="form-section-title">Lignes d'inventaire</div>
+                <div class="table-container inventory-table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Article</th>
+                                <th>Emplacement</th>
+                                <th class="text-right">Theorique</th>
+                                <th class="text-right inventory-count-col">Compte *</th>
+                                <th class="text-right">Ecart</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ligne in LignesInvFiltrees)
+                            {
+                                var ecartCls = ligne.Ecart > 0 ? "text-success" : ligne.Ecart < 0 ? "text-danger" : "text-muted";
+                                <tr class="@(ligne.Modifiee ? "row-inv-modified" : "")">
+                                    <td>
+                                        <div class="cell-main">@ligne.ArticleDesignation</div>
+                                        <div class="cell-sub"><code>@ligne.ArticleCode</code></div>
+                                    </td>
+                                    <td class="text-muted">@ligne.EmplacementCode</td>
+                                    <td class="text-right mono">@ligne.QuantiteTheorique</td>
+                                    <td class="text-right">
+                                        <input class="field-input inv-qty-input"
+                                               type="number" min="0"
+                                               value="@ligne.QuantiteComptee"
+                                               @onchange="(e) => OnQuantiteChange(ligne, e)" />
+                                    </td>
+                                    <td class="text-right mono @ecartCls">@(ligne.Ecart >= 0 ? "+" : "")@ligne.Ecart</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="editor-footer">
+            <div class="editor-footer-left text-muted">@lignesInventaire.Count(l => l.Modifiee) ligne(s) modifiee(s)</div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Fermer</button>
+                <button class="btn btn-primary" @onclick="ValiderInventaire" disabled="@(saving || !lignesInventaire.Any(l => l.Modifiee))">@(saving ? "Validation..." : "Valider les ajustements")</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<StockResumeDto> stocks = new();
+    private List<EmplacementDto> emplacements = new();
+    private List<LigneInventaireSaisie> lignesInventaire = new();
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+    private string rechercheInv = string.Empty;
+    private Guid emplacementInvId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Charger();
+    }
+
+    private async Task Charger()
+    {
+        chargement = true;
+        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
+        emplacements = (await Api.GetEmplacementsAsync()) ?? new();
+        ConstruireLignes();
+        chargement = false;
+    }
+
+    private void ConstruireLignes()
+    {
+        lignesInventaire = stocks.Select(s => new LigneInventaireSaisie
+        {
+            ArticleId = s.ArticleId,
+            ArticleCode = s.ArticleCode,
+            ArticleDesignation = s.ArticleDesignation,
+            EmplacementId = emplacements.FirstOrDefault()?.Id ?? Guid.Empty,
+            EmplacementCode = emplacements.FirstOrDefault()?.Code ?? "-",
+            QuantiteTheorique = s.QuantiteDisponible,
+            QuantiteComptee = s.QuantiteDisponible,
+            Modifiee = false
+        }).ToList();
+    }
+
+    private IEnumerable<LigneInventaireSaisie> LignesInvFiltrees
+    {
+        get
+        {
+            var q = lignesInventaire.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(rechercheInv))
+                q = q.Where(l => l.ArticleCode.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase) ||
+                                 l.ArticleDesignation.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase));
+            if (emplacementInvId != Guid.Empty)
+                q = q.Where(l => l.EmplacementId == emplacementInvId);
+            return q;
+        }
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/stocks");
+
+    private void OnQuantiteChange(LigneInventaireSaisie ligne, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val))
+        {
+            ligne.QuantiteComptee = val;
+            ligne.Modifiee = val != ligne.QuantiteTheorique;
+        }
+    }
+
+    private async Task ValiderInventaire()
+    {
+        var modifiees = lignesInventaire.Where(l => l.Modifiee && l.EmplacementId != Guid.Empty).ToList();
+        if (!modifiees.Any())
+            return;
+
+        saving = true;
+        var ok = 0;
+        var erreurs = 0;
+
+        foreach (var ligne in modifiees)
+        {
+            var result = await Api.AjustementStockAsync(new AjustementRequest
+            {
+                ArticleId = ligne.ArticleId,
+                EmplacementId = ligne.EmplacementId,
+                QuantiteReelle = ligne.QuantiteComptee,
+                Motif = $"Inventaire manuel - {DateTime.Now:dd/MM/yyyy}"
+            });
+
+            if (result?.Succes == true)
+            {
+                ligne.QuantiteTheorique = ligne.QuantiteComptee;
+                ligne.Modifiee = false;
+                ok++;
+            }
+            else
+            {
+                erreurs++;
+            }
+        }
+
+        saving = false;
+        msgCls = erreurs == 0 ? "alert-success" : "alert-error";
+        message = erreurs == 0 ? $"{ok} ajustement(s) enregistre(s) avec succes." : $"{ok} succes, {erreurs} erreur(s).";
+
+        if (erreurs == 0)
+        {
+            await Charger();
+        }
+    }
+}

@@ -208,6 +208,7 @@ public class StockService : IStockService
             m.Reference,
             m.Motif,
             m.Lot?.NumeroLot,
+            null,
             m.DateMouvement,
             m.CreatedBy));
     }

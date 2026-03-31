@@ -108,6 +108,7 @@ public class ProvisioningService
               Unite nvarchar(20) NOT NULL DEFAULT 'PCS', PrixAchat decimal(18,4) NOT NULL DEFAULT 0,
               PrixVente decimal(18,4) NOT NULL DEFAULT 0, SeuilAlerte int NOT NULL DEFAULT 5,
               StockMinimum int NOT NULL DEFAULT 0, StockMaximum int NOT NULL DEFAULT 0,
+              SansSuiviStock bit NOT NULL DEFAULT 0,
               GestionLot bit NOT NULL DEFAULT 0, GestionDLUO bit NOT NULL DEFAULT 0,
               FournisseurId uniqueidentifier NULL, Statut int NOT NULL DEFAULT 1,
               CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(), UpdatedAt datetime2 NULL,

@@ -1,0 +1,85 @@
+@page "/stocks/nouveau"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+<PageTitle>Nouveau document de stock - GestionStock</PageTitle>
+
+<div class="stock-new-page">
+    <div class="page-header stock-new-page__header">
+        <div>
+            <h1 class="page-title">Nouveau document de stock</h1>
+            <p class="page-subtitle">Choisissez le type de document a creer, puis poursuivez dans une fiche dediee.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-secondary" @onclick='() => Nav.NavigateTo("/stocks")'>Retour a la liste</button>
+        </div>
+    </div>
+
+    <section class="surface-hero stock-new-page__hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Creation guidee</span>
+            <h2>Chaque mouvement commence par un document clair et adapte au besoin.</h2>
+            <p>Entree, sortie, transfert et inventaire disposent chacun de leur ecran specialise pour reduire les erreurs et garder une trace nette.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Entete</span>
+            <span class="surface-pill">Lignes</span>
+            <span class="surface-pill">Validation</span>
+            <span class="surface-pill">Traçabilite</span>
+        </div>
+    </section>
+
+    <div class="stock-new-grid">
+        <button type="button" class="surface-card stock-new-card stock-new-card--entry" @onclick='() => Aller("/stocks/entree")'>
+            <span class="stock-new-card__badge">Flux entrant</span>
+            <h2>Document d'entree</h2>
+            <p>Recevez plusieurs articles dans une meme fiche avec reference, motif et lignes valorisees.</p>
+            <ul class="stock-new-card__list">
+                <li>Reception fournisseur</li>
+                <li>Entree initiale</li>
+                <li>Retour atelier</li>
+            </ul>
+            <span class="stock-new-card__cta">Creer une entree</span>
+        </button>
+
+        <button type="button" class="surface-card stock-new-card stock-new-card--exit" @onclick='() => Aller("/stocks/sortie")'>
+            <span class="stock-new-card__badge">Flux sortant</span>
+            <h2>Document de sortie</h2>
+            <p>Preparez un document de sortie pour consommation, casse, correction ou livraison interne.</p>
+            <ul class="stock-new-card__list">
+                <li>Consommation interne</li>
+                <li>Perte ou casse</li>
+                <li>Correction de stock</li>
+            </ul>
+            <span class="stock-new-card__cta">Creer une sortie</span>
+        </button>
+
+        <button type="button" class="surface-card stock-new-card stock-new-card--transfer" @onclick='() => Aller("/stocks/transfert")'>
+            <span class="stock-new-card__badge">Mouvement interne</span>
+            <h2>Document de transfert</h2>
+            <p>Deplacez des articles entre emplacements en conservant source, destination et references documentaires.</p>
+            <ul class="stock-new-card__list">
+                <li>Changement de quai</li>
+                <li>Reorganisation depot</li>
+                <li>Transfert inter-zones</li>
+            </ul>
+            <span class="stock-new-card__cta">Creer un transfert</span>
+        </button>
+
+        <button type="button" class="surface-card stock-new-card stock-new-card--inventory" @onclick='() => Aller("/stocks/inventaire")'>
+            <span class="stock-new-card__badge">Controle physique</span>
+            <h2>Document d'inventaire</h2>
+            <p>Saisissez les quantites comptees puis validez les ecarts dans une fiche multi-lignes dediee.</p>
+            <ul class="stock-new-card__list">
+                <li>Inventaire tournant</li>
+                <li>Controle general</li>
+                <li>Regularisation</li>
+            </ul>
+            <span class="stock-new-card__cta">Creer un inventaire</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    private void Aller(string url) => Nav.NavigateTo(url);
+}

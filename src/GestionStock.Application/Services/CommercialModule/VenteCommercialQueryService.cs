@@ -151,7 +151,24 @@ public class VenteCommercialQueryService : ICommercialVenteQueryService
 
         var lignes = new List<CommercialVenteLigneDto>();
         await using (var cmd = new SqlCommand(@"
-            SELECT l.*, a.Code AS ArticleCode
+            SELECT
+                l.Id,
+                l.DocumentId,
+                l.ArticleId,
+                l.Designation,
+                l.Quantite,
+                l.QuantiteLivree,
+                l.PrixUnitaireHT,
+                l.TauxRemise,
+                l.MontantRemise,
+                l.PrixNetHT,
+                l.TauxTVA,
+                l.MontantTVA,
+                l.MontantTTC,
+                l.NumeroLot,
+                l.NumeroSerie,
+                l.Ordre,
+                a.Code AS ArticleCode
             FROM LignesDocumentVente l
             LEFT JOIN Articles a ON a.Id=l.ArticleId
             WHERE l.DocumentId=@id
@@ -176,7 +193,8 @@ public class VenteCommercialQueryService : ICommercialVenteQueryService
                     reader.GetDecimal(11),
                     reader.GetDecimal(12),
                     reader.IsDBNull(13) ? null : reader.GetString(13),
-                    reader.GetInt32(14),
+                    reader.IsDBNull(14) ? null : reader.GetString(14),
+                    reader.GetInt32(15),
                     reader.IsDBNull(16) ? null : reader.GetString(16)));
             }
         }
@@ -246,6 +264,7 @@ public class VenteCommercialQueryService : ICommercialVenteQueryService
                 MontantTVA decimal(18,2) NOT NULL DEFAULT 0,
                 MontantTTC decimal(18,2) NOT NULL DEFAULT 0,
                 NumeroLot nvarchar(50) NULL,
+                NumeroSerie nvarchar(100) NULL,
                 Ordre int NOT NULL DEFAULT 0,
                 Notes nvarchar(500) NULL)"
         };
@@ -253,6 +272,13 @@ public class VenteCommercialQueryService : ICommercialVenteQueryService
         foreach (var script in scripts)
         {
             await using var cmd = new SqlCommand(script, conn);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (var cmd = new SqlCommand(
+            @"IF COL_LENGTH('LignesDocumentVente','NumeroSerie') IS NULL
+              ALTER TABLE LignesDocumentVente ADD NumeroSerie nvarchar(100) NULL", conn))
+        {
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }

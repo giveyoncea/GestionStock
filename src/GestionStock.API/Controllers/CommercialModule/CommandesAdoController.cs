@@ -442,6 +442,50 @@ public class CommandesAdoController : ControllerBase
                 updLigne.Parameters.AddWithValue("@id", ligne.LigneId);
                 await updLigne.ExecuteNonQueryAsync();
 
+                bool gestionNumeroDeSerie;
+                await using (var artChk = new SqlCommand(@"
+                    SELECT
+                        ISNULL(SansSuiviStock,0),
+                        ISNULL(GestionNumeroDeSerie,0)
+                    FROM Articles
+                    WHERE Id=@artId", conn))
+                {
+                    artChk.Parameters.AddWithValue("@artId", articleId);
+                    await using var artReader = await artChk.ExecuteReaderAsync();
+                    if (!await artReader.ReadAsync())
+                        return BadRequest(new { succes = false, message = "Article introuvable." });
+
+                    var sansSuivi = artReader.GetBoolean(0);
+                    gestionNumeroDeSerie = artReader.GetBoolean(1);
+                    if (sansSuivi)
+                        continue;
+                }
+
+                if (gestionNumeroDeSerie)
+                {
+                    if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                        return BadRequest(new { succes = false, message = "Le numero de serie est obligatoire pour cet article." });
+
+                    if (ligne.QuantiteRecue != 1)
+                        return BadRequest(new { succes = false, message = "Un article serialize doit etre receptionne avec une quantite egale a 1." });
+
+                    await using var serialChk = new SqlCommand(@"
+                        SELECT ISNULL(SUM(
+                            CASE TypeMouvement
+                                WHEN 1 THEN Quantite
+                                WHEN 2 THEN -Quantite
+                                ELSE 0
+                            END), 0)
+                        FROM MouvementsStock
+                        WHERE ArticleId=@artId
+                          AND NumeroSerie=@serie", conn);
+                    serialChk.Parameters.AddWithValue("@artId", articleId);
+                    serialChk.Parameters.AddWithValue("@serie", ligne.NumeroSerie);
+                    var serialDisponible = Convert.ToDecimal(await serialChk.ExecuteScalarAsync() ?? 0m);
+                    if (serialDisponible > 0)
+                        return BadRequest(new { succes = false, message = $"Le numero de serie '{ligne.NumeroSerie}' existe deja en stock." });
+                }
+
                 // Upsert stock
                 await using var upsert = new SqlCommand($@"
                     IF EXISTS (SELECT 1 FROM {stockTable} WHERE ArticleId=@artId AND EmplacementId=@empId)
@@ -458,15 +502,16 @@ public class CommandesAdoController : ControllerBase
                 await using var mvt = new SqlCommand($@"
                     INSERT INTO MouvementsStock
                         (Id,ArticleId,EmplacementSourceId,TypeMouvement,Quantite,
-                         {colPrix},{colDate},Reference,NumeroLot,CreatedBy)
+                         {colPrix},{colDate},Reference,NumeroLot,NumeroSerie,CreatedBy)
                     VALUES
-                        (NEWID(),@artId,@empId,1,@q,@prix,GETUTCDATE(),@ref,@lot,@user)", conn);
+                        (NEWID(),@artId,@empId,1,@q,@prix,GETUTCDATE(),@ref,@lot,@serie,@user)", conn);
                 mvt.Parameters.AddWithValue("@artId", articleId);
                 mvt.Parameters.AddWithValue("@empId", dto.EmplacementReceptionId);
                 mvt.Parameters.AddWithValue("@q",     ligne.QuantiteRecue);
                 mvt.Parameters.AddWithValue("@prix",  prixUnit);
                 mvt.Parameters.AddWithValue("@ref",   $"Réception commande {dto.CommandeId}");
                 mvt.Parameters.AddWithValue("@lot",   (object?)dto.NumeroLot ?? DBNull.Value);
+                mvt.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
                 mvt.Parameters.AddWithValue("@user",  UserId);
                 await mvt.ExecuteNonQueryAsync();
             }

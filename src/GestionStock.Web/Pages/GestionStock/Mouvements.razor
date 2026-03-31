@@ -44,6 +44,7 @@ else
                     <th>Date</th>
                     <th>Article</th>
                     <th>Type</th>
+                    <th>N° série</th>
                     <th>Emplacement</th>
                     <th class="text-right">Quantité</th>
                     <th class="text-right">Valeur</th>
@@ -67,6 +68,7 @@ else
                                 @GetMvtIcon(m.TypeMouvement) @m.TypeMouvementLibelle
                             </span>
                         </td>
+                        <td class="text-muted small">@(string.IsNullOrWhiteSpace(m.NumeroSerie) ? "—" : m.NumeroSerie)</td>
                         <td class="text-muted small">
                             @m.EmplacementSource
                             @if (!string.IsNullOrEmpty(m.EmplacementDestination))

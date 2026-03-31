@@ -1,0 +1,11 @@
+.stock-operation-page .stock-operation-hero {
+  margin-bottom: 20px;
+}
+
+.stock-operation-page .editor-shell {
+  align-items: start;
+}
+
+.stock-operation-page .editor-side {
+  max-width: 320px;
+}

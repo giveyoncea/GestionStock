@@ -1,0 +1,20 @@
+.stock-operation-page .stock-operation-hero {
+  margin-bottom: 20px;
+}
+
+.inventory-table-wrap {
+  max-height: 62vh;
+}
+
+.inventory-count-col {
+  width: 140px;
+}
+
+.inv-qty-input {
+  min-width: 110px;
+  text-align: right;
+}
+
+.row-inv-modified {
+  background: rgba(255, 246, 221, .55);
+}

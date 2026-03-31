@@ -210,6 +210,14 @@ else
                         <label class="field-label">Alerte péremption (jours)</label>
                         <input class="field-input" type="number" @bind="delaiAlerteDLUO" />
                     </div>
+                    <div class="field-group col-span-2">
+                        <label class="field-label">Gestion du stock négatif</label>
+                        <label class="checkbox-row">
+                            <input type="checkbox" @bind="autoriserStockNegatif" />
+                            <span>Autoriser le déstockage au-delà du stock disponible pour les articles suivis en stock.</span>
+                        </label>
+                        <span class="field-hint">Si cette option n'est pas cochée, les sorties, transferts, ajustements négatifs et déstockages commerciaux seront bloqués dès que le stock disponible est insuffisant.</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -566,6 +574,7 @@ else
     private int nombreDecimalesMontant = 2, nombreDecimalesQuantite = 3;
     private decimal tauxTVA = 20m;
     private int delaiAlerteDLUO = 30, delaiPaiement = 30;
+    private bool autoriserStockNegatif = false;
     private string prefixeCA = "CA", prefixeArt = "ART", prefixeLot = "LOT", prefixeInv = "INV";
     private string banque = "", iban = "", bic = "";
     private ComptabiliteDto cpt = new();
@@ -598,6 +607,7 @@ else
         symboleDevise = p.SymboleDevise; nombreDecimalesMontant = p.NombreDecimalesMontant;
         nombreDecimalesQuantite = p.NombreDecimalesQuantite;
         tauxTVA = p.TauxTVA; delaiAlerteDLUO = p.DelaiAlerteDLUO;
+        autoriserStockNegatif = p.AutoriserStockNegatif;
         prefixeCA = p.PrefixeCA; prefixeArt = p.PrefixeArt;
         prefixeLot = p.PrefixeLot; prefixeInv = p.PrefixeInv;
         banque = p.Banque; iban = p.Iban; bic = p.Bic; delaiPaiement = p.DelaiPaiement;
@@ -623,6 +633,7 @@ else
         NombreDecimalesMontant = nombreDecimalesMontant,
         NombreDecimalesQuantite = nombreDecimalesQuantite,
         TauxTVA = tauxTVA, DelaiAlerteDLUO = delaiAlerteDLUO,
+        AutoriserStockNegatif = autoriserStockNegatif,
         PrefixeCA = prefixeCA, PrefixeArt = prefixeArt,
         PrefixeLot = prefixeLot, PrefixeInv = prefixeInv,
         Banque = banque, Iban = iban, Bic = bic, DelaiPaiement = delaiPaiement

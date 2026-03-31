@@ -37,7 +37,7 @@ public class FamillesController : ControllerBase
             var where = actifSeulement ? "WHERE f.EstActif = 1" : string.Empty;
             var sql = $@"SELECT f.Id, f.Code, f.Libelle, f.Description,
                          f.ParentId, p.Libelle AS ParentLibelle,
-                         f.Couleur, f.Ordre, f.EstActif, f.CreatedAt
+                         f.Couleur, f.Ordre, ISNULL(f.SansSuiviStock,0) AS SansSuiviStock, f.EstActif, f.CreatedAt
                          FROM FamillesArticles f
                          LEFT JOIN FamillesArticles p ON f.ParentId = p.Id
                          {where}
@@ -59,8 +59,9 @@ public class FamillesController : ControllerBase
                     ParentLibelle = reader.IsDBNull(5) ? null : reader.GetString(5),
                     Couleur = reader.IsDBNull(6) ? null : reader.GetString(6),
                     Ordre = reader.GetInt32(7),
-                    EstActif = reader.GetBoolean(8),
-                    CreatedAt = reader.GetDateTime(9)
+                    SansSuiviStock = reader.GetBoolean(8),
+                    EstActif = reader.GetBoolean(9),
+                    CreatedAt = reader.GetDateTime(10)
                 });
             }
         }
@@ -93,8 +94,8 @@ public class FamillesController : ControllerBase
 
             var id = Guid.NewGuid();
             var sql = @"INSERT INTO FamillesArticles
-                        (Id, Code, Libelle, Description, ParentId, Couleur, Ordre, EstActif, CreatedAt, CreatedBy)
-                        VALUES (@id,@code,@lib,@desc,@parent,@couleur,@ordre,1,GETUTCDATE(),@user)";
+                        (Id, Code, Libelle, Description, ParentId, Couleur, Ordre, SansSuiviStock, EstActif, CreatedAt, CreatedBy)
+                        VALUES (@id,@code,@lib,@desc,@parent,@couleur,@ordre,@sansSuivi,1,GETUTCDATE(),@user)";
 
             await using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@id", id);
@@ -104,6 +105,7 @@ public class FamillesController : ControllerBase
             cmd.Parameters.AddWithValue("@parent", (object?)dto.ParentId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@couleur", (object?)dto.Couleur ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@ordre", dto.Ordre);
+            cmd.Parameters.AddWithValue("@sansSuivi", dto.SansSuiviStock);
             cmd.Parameters.AddWithValue("@user", UserId);
 
             await cmd.ExecuteNonQueryAsync();
@@ -130,7 +132,8 @@ public class FamillesController : ControllerBase
 
             var sql = @"UPDATE FamillesArticles SET
                         Libelle=@lib, Description=@desc, ParentId=@parent,
-                        Couleur=@couleur, Ordre=@ordre, UpdatedAt=GETUTCDATE(), UpdatedBy=@user
+                        Couleur=@couleur, Ordre=@ordre, SansSuiviStock=@sansSuivi,
+                        UpdatedAt=GETUTCDATE(), UpdatedBy=@user
                         WHERE Id=@id";
 
             await using var cmd = new SqlCommand(sql, conn);
@@ -139,6 +142,7 @@ public class FamillesController : ControllerBase
             cmd.Parameters.AddWithValue("@parent", (object?)dto.ParentId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@couleur", (object?)dto.Couleur ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@ordre", dto.Ordre);
+            cmd.Parameters.AddWithValue("@sansSuivi", dto.SansSuiviStock);
             cmd.Parameters.AddWithValue("@user", UserId);
             cmd.Parameters.AddWithValue("@id", id);
 
@@ -191,4 +195,5 @@ public class FamilleRequest
     public Guid? ParentId { get; set; }
     public string? Couleur { get; set; }
     public int Ordre { get; set; }
+    public bool SansSuiviStock { get; set; }
 }

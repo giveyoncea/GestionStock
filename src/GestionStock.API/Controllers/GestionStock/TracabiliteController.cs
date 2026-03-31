@@ -176,9 +176,11 @@ public class TracabiliteController : ControllerBase
                    ms.Reference, ms.Motif,
                    a.Code AS ArticleCode, a.Designation,
                    e1.Code AS EmplSource, e2.Code AS EmplDest,
+                   ISNULL(ms.NumeroSerie, l.NumeroSerie) AS NumeroSerie,
                    ms.CreatedBy
             FROM MouvementsStock ms
             JOIN Articles a ON a.Id = ms.ArticleId
+            LEFT JOIN Lots l ON l.Id = ms.LotId
             JOIN Emplacements e1 ON e1.Id = ms.EmplacementSourceId
             LEFT JOIN Emplacements e2 ON e2.Id = ms.EmplacementDestinationId
             WHERE ms.LotId = @lotId
@@ -196,7 +198,8 @@ public class TracabiliteController : ControllerBase
                 ArticleCode = r.GetString(8), ArticleDesignation = r.GetString(9),
                 EmplacementSource = r.IsDBNull(10) ? null : r.GetString(10),
                 EmplacementDestination = r.IsDBNull(11) ? null : r.GetString(11),
-                CreatedBy = r.IsDBNull(12) ? null : r.GetString(12)
+                NumeroSerie = r.IsDBNull(12) ? null : r.GetString(12),
+                CreatedBy = r.IsDBNull(13) ? null : r.GetString(13)
             });
         return Ok(list);
     }
@@ -240,7 +243,7 @@ public class TracabiliteController : ControllerBase
         await using var conn = new SqlConnection(ConnStr);
         await conn.OpenAsync();
         await using var cmd = new SqlCommand(
-            "SELECT Code, Designation, Categorie, FamilleArticle, Unite, PrixAchat, GestionLot, GestionDLUO FROM Articles WHERE Id=@id", conn);
+            "SELECT Code, Designation, Categorie, FamilleArticle, Unite, PrixAchat, GestionLot, GestionDLUO, ISNULL(GestionNumeroDeSerie,0) FROM Articles WHERE Id=@id", conn);
         cmd.Parameters.AddWithValue("@id", id);
         await using var r = await cmd.ExecuteReaderAsync();
         if (!await r.ReadAsync()) return null;
@@ -248,7 +251,8 @@ public class TracabiliteController : ControllerBase
             Categorie = r.IsDBNull(2) ? "" : r.GetString(2),
             FamilleArticle = r.IsDBNull(3) ? "" : r.GetString(3),
             Unite = r.GetString(4), PrixAchat = r.GetDecimal(5),
-            GestionLot = r.GetBoolean(6), GestionDLUO = r.GetBoolean(7) };
+            GestionLot = r.GetBoolean(6), GestionDLUO = r.GetBoolean(7),
+            GestionNumeroDeSerie = r.GetBoolean(8) };
     }
 
     private async Task<List<object>> GetLotsArticle(Guid articleId)
@@ -258,7 +262,7 @@ public class TracabiliteController : ControllerBase
         await conn.OpenAsync();
         await using var cmd = new SqlCommand(@"
             SELECT Id, NumeroLot, DateReception, DatePeremption,
-                   QuantiteInitiale, QuantiteRestante, Statut,
+                   QuantiteInitiale, QuantiteRestante, Statut, NumeroSerie,
                    CASE WHEN DatePeremption < GETUTCDATE() THEN 1 ELSE 0 END AS EstPerime
             FROM Lots WHERE ArticleId=@id ORDER BY DateReception DESC", conn);
         cmd.Parameters.AddWithValue("@id", articleId);
@@ -269,7 +273,8 @@ public class TracabiliteController : ControllerBase
                 DatePeremption = r.IsDBNull(3) ? (DateTime?)null : r.GetDateTime(3),
                 QuantiteInitiale = r.GetInt32(4), QuantiteRestante = r.GetInt32(5),
                 Statut = r.GetInt32(6), StatutLibelle = GetStatutLot(r.GetInt32(6)),
-                EstPerime = r.GetInt32(7) == 1 });
+                NumeroSerie = r.IsDBNull(7) ? null : r.GetString(7),
+                EstPerime = r.GetInt32(8) == 1 });
         return list;
     }
 
@@ -283,7 +288,7 @@ public class TracabiliteController : ControllerBase
                    ms.ValeurUnitaire * ms.Quantite AS ValeurTotale,
                    ms.Reference, ms.Motif,
                    e1.Code AS EmplSource, e2.Code AS EmplDest,
-                   l.NumeroLot, ms.CreatedBy
+                   l.NumeroLot, ISNULL(ms.NumeroSerie, l.NumeroSerie) AS NumeroSerie, ms.CreatedBy
             FROM MouvementsStock ms
             JOIN Emplacements e1 ON e1.Id = ms.EmplacementSourceId
             LEFT JOIN Emplacements e2 ON e2.Id = ms.EmplacementDestinationId
@@ -303,7 +308,8 @@ public class TracabiliteController : ControllerBase
                 EmplacementSource = r.IsDBNull(7) ? null : r.GetString(7),
                 EmplacementDestination = r.IsDBNull(8) ? null : r.GetString(8),
                 NumeroLot = r.IsDBNull(9) ? null : r.GetString(9),
-                CreatedBy = r.IsDBNull(10) ? null : r.GetString(10) });
+                NumeroSerie = r.IsDBNull(10) ? null : r.GetString(10),
+                CreatedBy = r.IsDBNull(11) ? null : r.GetString(11) });
         return list;
     }
 

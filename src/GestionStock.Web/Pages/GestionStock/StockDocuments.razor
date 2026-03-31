@@ -1,0 +1,16 @@
+@page "/stocks/documents"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+<PageTitle>Documents de stock - GestionStock</PageTitle>
+
+<div class="loading-state stock-documents-redirect">
+    <div class="spinner-lg"></div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Nav.NavigateTo("/stocks", replace: true);
+    }
+}

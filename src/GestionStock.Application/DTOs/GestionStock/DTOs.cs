@@ -17,7 +17,9 @@ public record ArticleDto(
     int SeuilAlerte,
     int StockMinimum,
     int StockMaximum,
+    bool SansSuiviStock,
     bool GestionLot,
+    bool GestionNumeroDeSerie,
     bool GestionDLUO,
     StatutArticle Statut,
     int QuantiteTotale,
@@ -40,7 +42,9 @@ public record CreerArticleDto(
     int SeuilAlerte,
     int StockMinimum,
     int StockMaximum,
+    bool SansSuiviStock,
     bool GestionLot,
+    bool GestionNumeroDeSerie,
     bool GestionDLUO,
     Guid? FournisseurPrincipalId
 );
@@ -57,7 +61,9 @@ public record ModifierArticleDto(
     int SeuilAlerte,
     int StockMinimum,
     int StockMaximum,
+    bool SansSuiviStock,
     bool GestionLot,
+    bool GestionNumeroDeSerie,
     bool GestionDLUO,
     Guid? FournisseurPrincipalId
 );
@@ -104,8 +110,47 @@ public record MouvementStockDto(
     string? Reference,
     string? Motif,
     string? NumeroLot,
+    string? NumeroSerie,
     DateTime DateMouvement,
     string CreatedBy
+);
+
+public record DocumentStockDto(
+    Guid Id,
+    string Numero,
+    int TypeDocument,
+    string TypeLibelle,
+    string? Reference,
+    DateTime DateDocument,
+    int Statut,
+    string StatutLibelle,
+    int NombreLignes,
+    int QuantiteTotale,
+    decimal ValeurTotale,
+    string CreatedBy,
+    DateTime? ValidatedAt,
+    string? ValidatedBy,
+    string? Motif,
+    string ResumeArticles,
+    List<LigneDocumentStockDto> Lignes
+);
+
+public record LigneDocumentStockDto(
+    Guid Id,
+    Guid ArticleId,
+    string ArticleCode,
+    string Designation,
+    Guid? EmplacementSourceId,
+    string? EmplacementSourceCode,
+    Guid? EmplacementDestinationId,
+    string? EmplacementDestinationCode,
+    int Quantite,
+    decimal ValeurUnitaire,
+    decimal ValeurTotale,
+    string? NumeroLot,
+    string? NumeroSerie,
+    string? Motif,
+    int Ordre
 );
 
 public record EntreeStockDto(
@@ -115,9 +160,30 @@ public record EntreeStockDto(
     decimal PrixUnitaire,
     string Reference,
     string? NumeroLot,
+    string? NumeroSerie,
     DateTime? DatePeremption,
     string? Motif
 );
+
+public class CreerDocumentStockEntreeDto
+{
+    public DateTime DateDocument { get; set; } = DateTime.Today;
+    public string Reference { get; set; } = string.Empty;
+    public string? Motif { get; set; }
+    public List<CreerLigneDocumentStockEntreeDto> Lignes { get; set; } = new();
+}
+
+public class CreerLigneDocumentStockEntreeDto
+{
+    public Guid ArticleId { get; set; }
+    public Guid EmplacementId { get; set; }
+    public int Quantite { get; set; }
+    public decimal PrixUnitaire { get; set; }
+    public string? NumeroLot { get; set; }
+    public string? NumeroSerie { get; set; }
+    public DateTime? DatePeremption { get; set; }
+    public string? Motif { get; set; }
+}
 
 public record SortieStockDto(
     Guid ArticleId,
@@ -125,6 +191,7 @@ public record SortieStockDto(
     int Quantite,
     string Reference,
     string? NumeroLot,
+    string? NumeroSerie,
     string? Motif
 );
 
@@ -226,7 +293,8 @@ public record ReceptionCommandeDto(
 
 public record ReceptionLigneDto(
     Guid LigneId,
-    int QuantiteRecue
+    int QuantiteRecue,
+    string? NumeroSerie
 );
 
 // ─── EMPLACEMENT ──────────────────────────────────────────────────────────────
@@ -348,6 +416,7 @@ public class ParametresDto
     public decimal TauxTVA { get; set; } = 20m;
     public int DelaiAlerteDLUO { get; set; } = 30;
     public bool GestionLotDefaut { get; set; }
+    public bool AutoriserStockNegatif { get; set; }
     public bool AlerteMailActif { get; set; }
     public bool InventaireAnnuelObligatoire { get; set; } = true;
     public string EmailAlerte { get; set; } = string.Empty;

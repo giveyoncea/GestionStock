@@ -37,6 +37,9 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
             await using var conn = new SqlConnection(_connectionStringProvider.GetCurrentConnectionString());
             await conn.OpenAsync(ct);
             await EnsureCommercialTablesAsync(conn, ct);
+            var validation = await ValiderLignesAsync(conn, dto.Lignes, ct);
+            if (!validation.Succes)
+                return (validation, null, null);
             return await CreateAchatCoreAsync(conn, dto, userId, ct);
         }
         catch (Exception ex)
@@ -88,7 +91,7 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
 
             var lignes = new List<CommercialAchatLigneRequestDto>();
             await using (var lCmd = new SqlCommand(@"
-                SELECT ArticleId, Designation, Quantite, PrixUnitaireHT, TauxRemise, TauxTVA, NumeroLot
+                SELECT ArticleId, Designation, Quantite, PrixUnitaireHT, TauxRemise, TauxTVA, NumeroLot, NumeroSerie
                 FROM LignesDocumentAchat
                 WHERE DocumentId=@id
                 ORDER BY Ordre", conn))
@@ -104,7 +107,8 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
                         reader.GetDecimal(3),
                         reader.GetDecimal(4),
                         reader.GetDecimal(5),
-                        reader.IsDBNull(6) ? null : reader.GetString(6)));
+                        reader.IsDBNull(6) ? null : reader.GetString(6),
+                        reader.IsDBNull(7) ? null : reader.GetString(7)));
                 }
             }
 
@@ -174,8 +178,8 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
 
             await using var cmd = new SqlCommand(@"
                 INSERT INTO LignesDocumentAchat (Id,DocumentId,ArticleId,Designation,Quantite,QuantiteRecue,
-                    PrixUnitaireHT,TauxRemise,MontantRemise,PrixNetHT,TauxTVA,MontantTTC,NumeroLot,Ordre)
-                VALUES (NEWID(),@doc,@art,@des,@qte,0,@pu,@trem,@mrem,@pnet,@ttva,@mttc,@lot,@ord)", conn);
+                    PrixUnitaireHT,TauxRemise,MontantRemise,PrixNetHT,TauxTVA,MontantTTC,NumeroLot,NumeroSerie,Ordre)
+                VALUES (NEWID(),@doc,@art,@des,@qte,0,@pu,@trem,@mrem,@pnet,@ttva,@mttc,@lot,@serie,@ord)", conn);
             cmd.Parameters.AddWithValue("@doc", id);
             cmd.Parameters.AddWithValue("@art", ligne.ArticleId);
             cmd.Parameters.AddWithValue("@des", ligne.Designation);
@@ -187,6 +191,7 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
             cmd.Parameters.AddWithValue("@ttva", ligne.TauxTVA);
             cmd.Parameters.AddWithValue("@mttc", montantTtcLigne);
             cmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@ord", i + 1);
             await cmd.ExecuteNonQueryAsync(ct);
         }
@@ -215,6 +220,74 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
 
         var num = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 1);
         return $"{prefixe}-{year}-{num:D6}";
+    }
+
+    private static async Task<ResultDto> ValiderLignesAsync(
+        SqlConnection conn,
+        IReadOnlyList<CommercialAchatLigneRequestDto> lignes,
+        CancellationToken ct)
+    {
+        foreach (var ligne in lignes)
+        {
+            var regles = await GetArticleStockRulesAsync(conn, ligne.ArticleId, ct);
+            if (!regles.Exists)
+                return ResultDto.Erreur($"Article introuvable pour la ligne '{ligne.Designation}'.");
+
+            if (regles.SansSuiviStock)
+                continue;
+
+            if (!regles.GestionNumeroDeSerie)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                return ResultDto.Erreur($"Le numero de serie est obligatoire pour l'article '{ligne.Designation}'.");
+
+            if (ligne.Quantite != 1)
+                return ResultDto.Erreur($"L'article serialize '{ligne.Designation}' doit avoir une quantite egale a 1.");
+        }
+
+        return ResultDto.Ok();
+    }
+
+    private static async Task<(bool Exists, bool SansSuiviStock, bool GestionNumeroDeSerie)> GetArticleStockRulesAsync(
+        SqlConnection conn,
+        Guid articleId,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(@"
+            SELECT
+                ISNULL(SansSuiviStock,0),
+                ISNULL(GestionNumeroDeSerie,0)
+            FROM Articles
+            WHERE Id=@id", conn);
+        cmd.Parameters.AddWithValue("@id", articleId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return (false, false, false);
+
+        return (true, reader.GetBoolean(0), reader.GetBoolean(1));
+    }
+
+    private static async Task<bool> IsNumeroSerieDisponibleAsync(
+        SqlConnection conn,
+        Guid articleId,
+        string numeroSerie,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(@"
+            SELECT ISNULL(SUM(
+                CASE TypeMouvement
+                    WHEN 1 THEN Quantite
+                    WHEN 2 THEN -Quantite
+                    ELSE 0
+                END), 0)
+            FROM MouvementsStock
+            WHERE ArticleId=@article
+              AND NumeroSerie=@serie", conn);
+        cmd.Parameters.AddWithValue("@article", articleId);
+        cmd.Parameters.AddWithValue("@serie", numeroSerie);
+        var quantite = Convert.ToDecimal(await cmd.ExecuteScalarAsync(ct) ?? 0m);
+        return quantite > 0;
     }
 
     private static async Task EnsureCommercialTablesAsync(SqlConnection conn, CancellationToken ct)
@@ -260,11 +333,24 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
                 TauxTVA decimal(5,2) NOT NULL DEFAULT 20,
                 MontantTTC decimal(18,2) NOT NULL DEFAULT 0,
                 NumeroLot nvarchar(50) NULL,
+                NumeroSerie nvarchar(100) NULL,
                 Ordre int NOT NULL DEFAULT 0,
                 Notes nvarchar(500) NULL)"
         };
 
         foreach (var script in scripts)
+        {
+            await using var cmd = new SqlCommand(script, conn);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        var alterations = new[]
+        {
+            @"IF COL_LENGTH('LignesDocumentAchat','NumeroSerie') IS NULL
+              ALTER TABLE LignesDocumentAchat ADD NumeroSerie nvarchar(100) NULL"
+        };
+
+        foreach (var script in alterations)
         {
             await using var cmd = new SqlCommand(script, conn);
             await cmd.ExecuteNonQueryAsync(ct);
@@ -286,10 +372,10 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
             return;
 
         await using var lignesCmd = new SqlCommand(
-            "SELECT ArticleId,Quantite,PrixUnitaireHT,NumeroLot FROM LignesDocumentAchat WHERE DocumentId=@id", conn);
+            "SELECT ArticleId,Quantite,PrixUnitaireHT,NumeroLot,NumeroSerie FROM LignesDocumentAchat WHERE DocumentId=@id", conn);
         lignesCmd.Parameters.AddWithValue("@id", docId);
 
-        var lignes = new List<(Guid ArticleId, decimal Quantite, decimal PrixUnitaire, string? NumeroLot)>();
+        var lignes = new List<(Guid ArticleId, decimal Quantite, decimal PrixUnitaire, string? NumeroLot, string? NumeroSerie)>();
         await using (var reader = await lignesCmd.ExecuteReaderAsync(ct))
         {
             while (await reader.ReadAsync(ct))
@@ -298,16 +384,30 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
                     reader.GetGuid(0),
                     reader.GetDecimal(1),
                     reader.GetDecimal(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3)));
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4)));
             }
         }
 
         foreach (var ligne in lignes)
         {
+            var regles = await GetArticleStockRulesAsync(conn, ligne.ArticleId, ct);
+            if (!regles.Exists || regles.SansSuiviStock)
+                continue;
+
+            if (regles.GestionNumeroDeSerie)
+            {
+                if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                    throw new InvalidOperationException("Le numero de serie est obligatoire pour un article serialize.");
+
+                if (await IsNumeroSerieDisponibleAsync(conn, ligne.ArticleId, ligne.NumeroSerie!, ct))
+                    throw new InvalidOperationException($"Le numero de serie '{ligne.NumeroSerie}' existe deja en stock.");
+            }
+
             await using (var mouvementCmd = new SqlCommand(@"
                 INSERT INTO MouvementsStock (Id,ArticleId,EmplacementSourceId,TypeMouvement,
-                    Quantite,PrixUnitaire,Reference,NumeroLot,CreatedAt,CreatedBy)
-                VALUES (NEWID(),@art,@empl,1,@qte,@pu,@ref,@lot,GETUTCDATE(),@user)", conn))
+                    Quantite,PrixUnitaire,Reference,NumeroLot,NumeroSerie,CreatedAt,CreatedBy)
+                VALUES (NEWID(),@art,@empl,1,@qte,@pu,@ref,@lot,@serie,GETUTCDATE(),@user)", conn))
             {
                 mouvementCmd.Parameters.AddWithValue("@art", ligne.ArticleId);
                 mouvementCmd.Parameters.AddWithValue("@empl", emplacementId.Value);
@@ -315,6 +415,7 @@ public class AchatCommercialCommandService : ICommercialAchatCommandService
                 mouvementCmd.Parameters.AddWithValue("@pu", ligne.PrixUnitaire);
                 mouvementCmd.Parameters.AddWithValue("@ref", $"BR-{docId.ToString()[..8]}");
                 mouvementCmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
+                mouvementCmd.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
                 mouvementCmd.Parameters.AddWithValue("@user", "commercial");
                 await mouvementCmd.ExecuteNonQueryAsync(ct);
             }

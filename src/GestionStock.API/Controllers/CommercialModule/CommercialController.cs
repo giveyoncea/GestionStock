@@ -293,7 +293,8 @@ public class CommercialController : ControllerBase
                     l.PrixUnitaireHT,
                     l.TauxRemise,
                     l.TauxTVA,
-                    l.NumeroLot))
+                    l.NumeroLot,
+                    l.NumeroSerie))
                 .ToList());
 
     private static CommercialReglementRequestDto MapReglementRequest(ReglementRequest dto)
@@ -322,7 +323,8 @@ public class CommercialController : ControllerBase
                     l.PrixUnitaireHT,
                     l.TauxRemise,
                     l.TauxTVA,
-                    l.NumeroLot))
+                    l.NumeroLot,
+                    l.NumeroSerie))
                 .ToList());
 
     // DOCUMENTS DE VENTE
@@ -801,6 +803,7 @@ public class LigneDocumentRequest {
     public decimal TauxRemise { get; set; } = 0;
     public decimal TauxTVA { get; set; } = 20;
     public string? NumeroLot { get; set; }
+    public string? NumeroSerie { get; set; }
 }
 
 public class DocumentVenteRequest {

@@ -2,15 +2,15 @@
 @attribute [Authorize(Roles = "Admin")]
 @inject IApiService Api
 
-<PageTitle>RÃ´les & Permissions â€“ GestionStock</PageTitle>
+<PageTitle>Rôles & Permissions - GestionStock</PageTitle>
 
 <div class="page-header">
     <div>
-        <h1 class="page-title">RÃ´les & Permissions</h1>
-        <p class="page-date">GÃ©rez les rÃ´les et leurs droits d'accÃ¨s</p>
+        <h1 class="page-title">Rôles & Permissions</h1>
+        <p class="page-date">Gérez les rôles et leurs droits d'accès</p>
     </div>
     <div class="header-actions">
-        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau rÃ´le</button>
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau rôle</button>
     </div>
 </div>
 
@@ -30,7 +30,7 @@ else
                     <div class="role-color-dot" style="background:@(role.Couleur ?? GetDefaultColor(role.Id))"></div>
                     <div class="role-full-info">
                         <span class="role-full-name">@role.Libelle</span>
-                        @if (role.EstSysteme) { <span class="badge badge-gray" style="font-size:9px">SystÃ¨me</span> }
+                        @if (role.EstSysteme) { <span class="badge badge-gray" style="font-size:9px">Système</span> }
                         @if (!role.EstActif) { <span class="badge badge-red" style="font-size:9px">Inactif</span> }
                     </div>
                     <div class="role-full-actions row-actions">
@@ -73,23 +73,23 @@ else
             </div>
         }
     </div>
-    @if (!roles.Any()) { <div class="empty-state">Aucun rÃ´le trouvÃ©.</div> }
+    @if (!roles.Any()) { <div class="empty-state">Aucun rôle trouvé.</div> }
 }
 
-@* â”€â”€â”€ MODAL CRÃ‰ATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal creation *@
 @if (showCreation)
 {
     <div class="modal-overlay" @onclick="() => showCreation = false">
         <div class="modal modal-lg" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>+ Nouveau rÃ´le</h2>
-                <button class="btn-close" @onclick="() => showCreation = false">âœ•</button>
+                <h2>+ Nouveau rôle</h2>
+                <button class="btn-close" @onclick="() => showCreation = false">✕</button>
             </div>
             <div class="modal-body">
                 <div class="form-grid">
                     <div class="field-group">
-                        <label class="field-label">LibellÃ© *</label>
-                        <input class="field-input" @bind="fLibelle" placeholder="Ex: Responsable entrepÃ´t" />
+                        <label class="field-label">Libellé *</label>
+                        <input class="field-input" @bind="fLibelle" placeholder="Ex: Responsable entrepôt" />
                     </div>
                     <div class="field-group">
                         <label class="field-label">Couleur</label>
@@ -97,7 +97,7 @@ else
                     </div>
                     <div class="field-group col-span-2">
                         <label class="field-label">Description</label>
-                        <input class="field-input" @bind="fDescription" placeholder="DÃ©crivez ce rÃ´leâ€¦" />
+                        <input class="field-input" @bind="fDescription" placeholder="Décrivez ce rôle..." />
                     </div>
                 </div>
                 <div style="margin-top:16px">
@@ -108,28 +108,28 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showCreation = false">Annuler</button>
                 <button class="btn-primary" @onclick="CreerRole" disabled="@saving">
-                    @(saving ? "CrÃ©ationâ€¦" : "CrÃ©er le rÃ´le")
+                    @(saving ? "Création..." : "Créer le rôle")
                 </button>
             </div>
         </div>
     </div>
 }
 
-@* â”€â”€â”€ MODAL Ã‰DITION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal edition *@
 @if (showEdition && roleEdite != null)
 {
     <div class="modal-overlay" @onclick="() => showEdition = false">
         <div class="modal modal-lg" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>âœŽ @(roleEdite.EstSysteme ? "Permissions â€” " : "Modifier â€” ")@roleEdite.Libelle</h2>
-                <button class="btn-close" @onclick="() => showEdition = false">âœ•</button>
+                <h2>✎ @(roleEdite.EstSysteme ? "Permissions - " : "Modifier - ")@roleEdite.Libelle</h2>
+                <button class="btn-close" @onclick="() => showEdition = false">✕</button>
             </div>
             <div class="modal-body">
                 @if (!roleEdite.EstSysteme)
                 {
                     <div class="form-grid" style="margin-bottom:16px">
                         <div class="field-group">
-                            <label class="field-label">LibellÃ© *</label>
+                            <label class="field-label">Libellé *</label>
                             <input class="field-input" @bind="fLibelle" />
                         </div>
                         <div class="field-group">
@@ -145,7 +145,7 @@ else
                 else
                 {
                     <div class="role-system-note">
-                        â„¹ Ce rÃ´le systÃ¨me est protÃ©gÃ©. Vous pouvez modifier ses permissions mais pas son nom.
+                        ℹ Ce rôle système est protégé. Vous pouvez modifier ses permissions mais pas son nom.
                     </div>
                 }
                 <div>
@@ -153,8 +153,8 @@ else
                         <label class="field-label" style="margin:0">Permissions</label>
                         <div style="display:flex;gap:8px">
                             <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ToutCocher">Tout cocher</button>
-                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ToutDecocher">Tout dÃ©cocher</button>
-                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ResetDefauts">â†© DÃ©fauts</button>
+                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ToutDecocher">Tout décocher</button>
+                            <button class="btn-secondary" style="font-size:11px;padding:4px 10px" @onclick="ResetDefauts">↩ Défauts</button>
                         </div>
                     </div>
                     @RenderPermGrid(fPermissions)
@@ -163,33 +163,33 @@ else
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showEdition = false">Annuler</button>
                 <button class="btn-primary" @onclick="SauvegarderRole" disabled="@saving">
-                    @(saving ? "Enregistrementâ€¦" : "Sauvegarder")
+                    @(saving ? "Enregistrement..." : "Sauvegarder")
                 </button>
             </div>
         </div>
     </div>
 }
 
-@* â”€â”€â”€ MODAL SUPPRESSION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
+@* Modal suppression *@
 @if (showSuppression && roleEdite != null)
 {
     <div class="modal-overlay" @onclick="() => showSuppression = false">
         <div class="modal" @onclick:stopPropagation>
             <div class="modal-header">
-                <h2>Supprimer â€” @roleEdite.Libelle</h2>
-                <button class="btn-close" @onclick="() => showSuppression = false">âœ•</button>
+                <h2>Supprimer - @roleEdite.Libelle</h2>
+                <button class="btn-close" @onclick="() => showSuppression = false">✕</button>
             </div>
             <div class="modal-body">
-                <p>Cette action est irrÃ©versible. Le rÃ´le <strong>@roleEdite.Libelle</strong> sera dÃ©finitivement supprimÃ©.</p>
+                <p>Cette action est irréversible. Le rôle <strong>@roleEdite.Libelle</strong> sera définitivement supprimé.</p>
                 @if (roleEdite.NbUtilisateurs > 0)
                 {
-                    <div class="alert-error">Ce rÃ´le est assignÃ© Ã  @roleEdite.NbUtilisateurs utilisateur(s). RÃ©assignez-les d'abord.</div>
+                    <div class="alert-error">Ce rôle est assigné à @roleEdite.NbUtilisateurs utilisateur(s). Réassignez-les d'abord.</div>
                 }
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @onclick="() => showSuppression = false">Annuler</button>
                 <button class="btn-danger" @onclick="SupprimerRole" disabled="@(saving || roleEdite.NbUtilisateurs > 0)">
-                    @(saving ? "Suppressionâ€¦" : "Confirmer la suppression")
+                    @(saving ? "Suppression..." : "Confirmer la suppression")
                 </button>
             </div>
         </div>
@@ -233,6 +233,10 @@ else
     {
         chargement = true;
         roles = await Api.GetRolesCompletAsync() ?? new();
+        foreach (var role in roles)
+        {
+            role.Permissions = NormalizePermissions(role.Permissions).ToArray();
+        }
         chargement = false;
     }
 
@@ -249,7 +253,7 @@ else
         fLibelle = role.Libelle;
         fDescription = role.Description;
         fCouleur = role.Couleur ?? GetDefaultColor(role.Id);
-        fPermissions = new HashSet<string>(role.Permissions);
+        fPermissions = new HashSet<string>(NormalizePermissions(role.Permissions));
         showEdition = true;
     }
 
@@ -271,7 +275,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(fLibelle))
         {
-            message = "Le libellÃ© est obligatoire."; msgCls = "alert-error"; return;
+            message = "Le libellé est obligatoire."; msgCls = "alert-error"; return;
         }
         saving = true;
         var r = await Api.CreerRoleAsync(new RoleRequest
@@ -367,10 +371,10 @@ else
             {"articles","Articles"}, {"stocks","Stocks"}, {"mouvements","Mouvements"},
             {"fournisseurs","Fournisseurs"}, {"commandes","Commandes"}, {"rapports","Rapports"},
             {"inventaire","Inventaire"}, {"utilisateurs","Utilisateurs"},
-            {"parametres","ParamÃ¨tres"}, {"tracabilite","TraÃ§abilitÃ©"}
+            {"parametres","Paramètres"}, {"tracabilite","Traçabilité"}
         };
         var result = new Dictionary<string, List<string>>();
-        foreach (var p in perms)
+        foreach (var p in NormalizePermissions(perms))
         {
             var mod = p.Split('.')[0];
             var label = map.GetValueOrDefault(mod, mod);
@@ -381,10 +385,34 @@ else
     }
 
     private string FormatAction(string p) => p.Split('.').Length > 1 ? p.Split('.')[1] switch {
-        "lire" => "ðŸ“– Lire", "ecrire" => "âœ Ã‰crire",
-        "gerer" => "âš™ GÃ©rer", "saisir" => "ðŸ“ Saisir",
-        "valider" => "âœ“ Valider", _ => p.Split('.')[1]
+        "lire" => "Lire", "ecrire" => "Écrire",
+        "gerer" => "Gérer", "saisir" => "Saisir",
+        "valider" => "Valider", _ => p.Split('.')[1]
     } : p;
+
+    private static IEnumerable<string> NormalizePermissions(IEnumerable<string> perms) =>
+        perms
+            .SelectMany(ParsePermissionChunk)
+            .Select(p => p.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> ParsePermissionChunk(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            yield break;
+
+        var cleaned = raw.Trim()
+            .Trim('[', ']')
+            .Replace("\"", string.Empty)
+            .Replace("'", string.Empty);
+
+        foreach (var part in cleaned.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!string.IsNullOrWhiteSpace(part))
+                yield return part;
+        }
+    }
 
     private string GetDefaultColor(int id) => id switch {
         1 => "#e24b4a", 2 => "#3d9b52", 3 => "#2b7dd4",

@@ -1,0 +1,151 @@
+.famille-editor-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.famille-editor-hero {
+    align-items: start;
+}
+
+.editor-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 1.5rem;
+}
+
+.editor-card,
+.editor-side-card {
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 1.2rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+}
+
+.editor-card {
+    overflow: hidden;
+}
+
+.editor-section {
+    padding: 1.35rem 1.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.editor-section:last-child {
+    border-bottom: 0;
+}
+
+.editor-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.editor-span-2 {
+    grid-column: span 2;
+}
+
+.editor-span-3 {
+    grid-column: span 3;
+}
+
+.field-textarea {
+    min-height: 110px;
+    resize: vertical;
+}
+
+.editor-side {
+    display: grid;
+    gap: 1rem;
+    align-content: start;
+}
+
+.editor-side-card {
+    padding: 1.2rem 1.25rem;
+}
+
+.editor-side-card h3 {
+    margin: 0 0 0.8rem;
+    font-size: 1rem;
+    color: #0f172a;
+}
+
+.editor-hints {
+    margin: 0;
+    padding-left: 1rem;
+    color: #475569;
+    display: grid;
+    gap: 0.65rem;
+}
+
+.editor-preview {
+    margin: 0;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.editor-preview div {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.editor-preview dt {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+
+.editor-preview dd {
+    margin: 0;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.editor-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0 0.25rem;
+}
+
+.editor-footer-left,
+.editor-footer-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+@media (max-width: 1100px) {
+    .editor-shell {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 760px) {
+    .editor-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .editor-span-2,
+    .editor-span-3 {
+        grid-column: auto;
+    }
+
+    .editor-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .editor-footer-left,
+    .editor-footer-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .editor-footer-actions > * ,
+    .editor-footer-left > * {
+        flex: 1;
+    }
+}

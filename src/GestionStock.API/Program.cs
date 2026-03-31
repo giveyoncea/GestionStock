@@ -103,6 +103,7 @@ try
                     TauxTVA decimal(5,2) NOT NULL DEFAULT 20,
                     DelaiAlerteDLUO int NOT NULL DEFAULT 30,
                     GestionLotDefaut bit NOT NULL DEFAULT 0,
+                    AutoriserStockNegatif bit NOT NULL DEFAULT 0,
                     AlerteMailActif bit NOT NULL DEFAULT 0,
                     InventaireAnnuelObligatoire bit NOT NULL DEFAULT 1,
                     EmailAlerte nvarchar(150) NOT NULL DEFAULT '',
@@ -185,6 +186,7 @@ try
                     ParentId uniqueidentifier NULL,
                     Couleur nvarchar(10) NULL,
                     Ordre int NOT NULL DEFAULT 0,
+                    SansSuiviStock bit NOT NULL DEFAULT 0,
                     EstActif bit NOT NULL DEFAULT 1,
                     CreatedAt datetime2 NOT NULL DEFAULT GETUTCDATE(),
                     UpdatedAt datetime2 NULL,
@@ -194,6 +196,27 @@ try
                         REFERENCES FamillesArticles(Id)
                 )");
             // Ajouter TypeDepot si la colonne manque (table existante sans elle)
+            await db.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID('FamillesArticles')
+                               AND name = 'SansSuiviStock')
+                ALTER TABLE FamillesArticles ADD SansSuiviStock bit NOT NULL DEFAULT 0");
+            await db.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID('Articles')
+                               AND name = 'SansSuiviStock')
+                ALTER TABLE Articles ADD SansSuiviStock bit NOT NULL DEFAULT 0");
+            await db.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID('Articles')
+                               AND name = 'GestionNumeroDeSerie')
+                ALTER TABLE Articles ADD GestionNumeroDeSerie bit NOT NULL DEFAULT 0");
+            await db.Database.ExecuteSqlRawAsync(@"
+                IF EXISTS (SELECT 1 FROM sysobjects WHERE name='MouvementsStock' AND xtype='U')
+                   AND NOT EXISTS (SELECT 1 FROM sys.columns
+                                   WHERE object_id = OBJECT_ID('MouvementsStock')
+                                   AND name = 'NumeroSerie')
+                ALTER TABLE MouvementsStock ADD NumeroSerie nvarchar(120) NULL");
             await db.Database.ExecuteSqlRawAsync(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns
                                WHERE object_id = OBJECT_ID('Depots')
@@ -239,6 +262,11 @@ try
                                WHERE object_id = OBJECT_ID('Parametres')
                                AND name = 'ImprimanteRecusDefaut')
                 ALTER TABLE Parametres ADD ImprimanteRecusDefaut nvarchar(120) NOT NULL DEFAULT ''");
+            await db.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID('Parametres')
+                               AND name = 'AutoriserStockNegatif')
+                ALTER TABLE Parametres ADD AutoriserStockNegatif bit NOT NULL DEFAULT 0");
             await db.Database.ExecuteSqlRawAsync(@"
                 IF NOT EXISTS (SELECT 1 FROM sys.columns
                                WHERE object_id = OBJECT_ID('Parametres')

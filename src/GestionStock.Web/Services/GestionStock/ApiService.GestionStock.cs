@@ -18,6 +18,9 @@ public partial class ApiService
         return GetAsync<PagedResult<ArticleDto>>(url);
     }
 
+    public Task<ArticleDto?> GetArticleAsync(Guid id)
+        => GetAsync<ArticleDto>($"api/articles/{id}");
+
     public Task<IEnumerable<AlerteStockDto>?> GetArticlesEnAlerteAsync()
         => GetAsync<IEnumerable<AlerteStockDto>>("api/articles/alertes");
 
@@ -44,6 +47,29 @@ public partial class ApiService
             url += $"&au={au:O}";
         return GetAsync<IEnumerable<MouvementStockDto>>(url);
     }
+
+    public Task<IEnumerable<DocumentStockDto>?> GetDocumentsStockAsync(DateTime? du, DateTime? au, int? type, string? q)
+    {
+        var url = "api/stocks/documents?placeholder=1";
+        if (du.HasValue)
+            url += $"&du={du:O}";
+        if (au.HasValue)
+            url += $"&au={au:O}";
+        if (type.HasValue && type.Value > 0)
+            url += $"&type={type.Value}";
+        if (!string.IsNullOrWhiteSpace(q))
+            url += $"&q={Uri.EscapeDataString(q)}";
+        return GetAsync<IEnumerable<DocumentStockDto>>(url);
+    }
+
+    public Task<DocumentStockDto?> GetDocumentStockAsync(Guid id)
+        => GetAsync<DocumentStockDto>($"api/stocks/documents/{id}");
+
+    public Task<ResultDto?> ValiderDocumentStockAsync(Guid id)
+        => PostEmptyAsync($"api/stocks/documents/{id}/valider");
+
+    public Task<ResultDto?> CreerDocumentEntreeStockAsync(DocumentEntreeStockRequest dto)
+        => PostAsync("api/stocks/documents/entree", dto);
 
     public Task<ResultDto?> EntreeStockAsync(EntreeStockDto dto)
         => PostAsync("api/stocks/entree", dto);

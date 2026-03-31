@@ -98,7 +98,9 @@ public class ArticlesAdoController : ControllerBase
                        ISNULL(a.SeuilAlerte,0) AS SeuilAlerte,
                        ISNULL(a.StockMinimum,0) AS StockMinimum,
                        ISNULL(a.StockMaximum,0) AS StockMaximum,
+                       ISNULL(a.SansSuiviStock,0) AS SansSuiviStock,
                        ISNULL(a.GestionLot,0) AS GestionLot,
+                       ISNULL(a.GestionNumeroDeSerie,0) AS GestionNumeroDeSerie,
                        ISNULL(a.GestionDLUO,0) AS GestionDLUO,
                        ISNULL(a.Statut,1) AS Statut,
                        ISNULL(a.CreatedAt, GETUTCDATE()) AS CreatedAt,
@@ -122,6 +124,7 @@ public class ArticlesAdoController : ControllerBase
             {
                 var qte   = reader.GetInt32(reader.GetOrdinal("QuantiteTotale"));
                 var seuil = reader.GetInt32(reader.GetOrdinal("SeuilAlerte"));
+                var sansSuiviStock = reader.GetBoolean(reader.GetOrdinal("SansSuiviStock"));
                 items.Add(new
                 {
                     id             = reader.GetGuid(reader.GetOrdinal("Id")),
@@ -137,13 +140,15 @@ public class ArticlesAdoController : ControllerBase
                     seuilAlerte    = seuil,
                     stockMinimum   = reader.GetInt32(reader.GetOrdinal("StockMinimum")),
                     stockMaximum   = reader.GetInt32(reader.GetOrdinal("StockMaximum")),
+                    sansSuiviStock = sansSuiviStock,
                     gestionLot     = reader.GetBoolean(reader.GetOrdinal("GestionLot")),
+                    gestionNumeroDeSerie = reader.GetBoolean(reader.GetOrdinal("GestionNumeroDeSerie")),
                     gestionDLUO    = reader.GetBoolean(reader.GetOrdinal("GestionDLUO")),
                     statut         = reader.GetInt32(reader.GetOrdinal("Statut")),
                     createdAt      = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                     quantiteTotale = qte,
-                    estEnAlerte    = qte <= seuil && seuil > 0,
-                    estEnRupture   = qte == 0,
+                    estEnAlerte    = !sansSuiviStock && qte <= seuil && seuil > 0,
+                    estEnRupture   = !sansSuiviStock && qte == 0,
                     fournisseurNom = reader.GetString(reader.GetOrdinal("FournisseurNom"))
                 });
             }
@@ -264,11 +269,11 @@ public class ArticlesAdoController : ControllerBase
             INSERT INTO Articles
                 (Id,Code,CodeBarres,Designation,Description,Categorie,FamilleArticle,Unite,
                  PrixAchat,PrixVente,ValeurStockMoyen,SeuilAlerte,StockMinimum,StockMaximum,
-                 GestionLot,GestionNumeroDeSerie,GestionDLUO,GestionDLC,Statut,CreatedAt,CreatedBy)
+                 SansSuiviStock,GestionLot,GestionNumeroDeSerie,GestionDLUO,GestionDLC,Statut,CreatedAt,CreatedBy)
             VALUES
                 (@id,@code,@cb,@desig,@desc,@cat,@fam,@unite,
                  @pa,@pv,0,@sa,@sm,@smax,
-                 @gl,0,@gdluo,0,1,GETUTCDATE(),@user)", conn);
+                 @sansSuivi,@gl,@gns,@gdluo,0,1,GETUTCDATE(),@user)", conn);
         cmd.Parameters.AddWithValue("@id",    id);
         cmd.Parameters.AddWithValue("@code",  dto.Code.Trim().ToUpper());
         cmd.Parameters.AddWithValue("@cb",    (object?)dto.CodeBarres ?? DBNull.Value);
@@ -282,7 +287,9 @@ public class ArticlesAdoController : ControllerBase
         cmd.Parameters.AddWithValue("@sa",    dto.SeuilAlerte);
         cmd.Parameters.AddWithValue("@sm",    dto.StockMinimum);
         cmd.Parameters.AddWithValue("@smax",  dto.StockMaximum);
+        cmd.Parameters.AddWithValue("@sansSuivi", dto.SansSuiviStock ? 1 : 0);
         cmd.Parameters.AddWithValue("@gl",    dto.GestionLot ? 1 : 0);
+        cmd.Parameters.AddWithValue("@gns",   dto.GestionNumeroDeSerie ? 1 : 0);
         cmd.Parameters.AddWithValue("@gdluo", dto.GestionDLUO ? 1 : 0);
         cmd.Parameters.AddWithValue("@user",  UserId);
         await cmd.ExecuteNonQueryAsync();
@@ -301,7 +308,7 @@ public class ArticlesAdoController : ControllerBase
                 Designation=@desig, Description=@desc, Categorie=@cat,
                 FamilleArticle=@fam, Unite=@unite, PrixAchat=@pa, PrixVente=@pv,
                 SeuilAlerte=@sa, StockMinimum=@sm, StockMaximum=@smax,
-                GestionLot=@gl, GestionDLUO=@gdluo,
+                SansSuiviStock=@sansSuivi, GestionLot=@gl, GestionNumeroDeSerie=@gns, GestionDLUO=@gdluo,
                 UpdatedAt=GETUTCDATE(), UpdatedBy=@user
             WHERE Id=@id", conn);
         cmd.Parameters.AddWithValue("@id",    id);
@@ -315,7 +322,9 @@ public class ArticlesAdoController : ControllerBase
         cmd.Parameters.AddWithValue("@sa",    dto.SeuilAlerte);
         cmd.Parameters.AddWithValue("@sm",    dto.StockMinimum);
         cmd.Parameters.AddWithValue("@smax",  dto.StockMaximum);
+        cmd.Parameters.AddWithValue("@sansSuivi", dto.SansSuiviStock ? 1 : 0);
         cmd.Parameters.AddWithValue("@gl",    dto.GestionLot ? 1 : 0);
+        cmd.Parameters.AddWithValue("@gns",   dto.GestionNumeroDeSerie ? 1 : 0);
         cmd.Parameters.AddWithValue("@gdluo", dto.GestionDLUO ? 1 : 0);
         cmd.Parameters.AddWithValue("@user",  UserId);
         var rows = await cmd.ExecuteNonQueryAsync();
@@ -345,8 +354,10 @@ public class ArticlesAdoController : ControllerBase
     private static object BuildArticleObject(SqlDataReader r)
     {
         int qte = 0, seuil = 0;
+        bool sansSuiviStock = false;
         try { qte   = r.GetInt32(r.GetOrdinal("QuantiteTotale")); } catch { }
         try { seuil = r.GetInt32(r.GetOrdinal("SeuilAlerte"));    } catch { }
+        try { sansSuiviStock = r.GetBoolean(r.GetOrdinal("SansSuiviStock")); } catch { }
         return new
         {
             id             = r.GetGuid(r.GetOrdinal("Id")),
@@ -362,13 +373,15 @@ public class ArticlesAdoController : ControllerBase
             seuilAlerte    = seuil,
             stockMinimum   = r.IsDBNull(r.GetOrdinal("StockMinimum"))   ? 0 : r.GetInt32(r.GetOrdinal("StockMinimum")),
             stockMaximum   = r.IsDBNull(r.GetOrdinal("StockMaximum"))   ? 0 : r.GetInt32(r.GetOrdinal("StockMaximum")),
+            sansSuiviStock = sansSuiviStock,
             gestionLot     = r.IsDBNull(r.GetOrdinal("GestionLot"))     ? false : r.GetBoolean(r.GetOrdinal("GestionLot")),
+            gestionNumeroDeSerie = r.IsDBNull(r.GetOrdinal("GestionNumeroDeSerie")) ? false : r.GetBoolean(r.GetOrdinal("GestionNumeroDeSerie")),
             gestionDLUO    = r.IsDBNull(r.GetOrdinal("GestionDLUO"))    ? false : r.GetBoolean(r.GetOrdinal("GestionDLUO")),
             statut         = r.IsDBNull(r.GetOrdinal("Statut"))         ? 1 : r.GetInt32(r.GetOrdinal("Statut")),
             createdAt      = r.IsDBNull(r.GetOrdinal("CreatedAt"))      ? DateTime.UtcNow : r.GetDateTime(r.GetOrdinal("CreatedAt")),
             quantiteTotale = qte,
-            estEnAlerte    = qte <= seuil && seuil > 0,
-            estEnRupture   = qte == 0,
+            estEnAlerte    = !sansSuiviStock && qte <= seuil && seuil > 0,
+            estEnRupture   = !sansSuiviStock && qte == 0,
             fournisseurNom = r.IsDBNull(r.GetOrdinal("FournisseurNom")) ? "" : r.GetString(r.GetOrdinal("FournisseurNom"))
         };
     }

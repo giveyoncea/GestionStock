@@ -25,6 +25,7 @@ public class Article : BaseEntity
     public int SeuilAlerte { get; private set; }
     public int StockMinimum { get; private set; }
     public int StockMaximum { get; private set; }
+    public bool SansSuiviStock { get; private set; }
 
     // Informations de traçabilité
     public bool GestionLot { get; private set; }
@@ -100,7 +101,9 @@ public class Article : BaseEntity
         int seuilAlerte,
         int stockMinimum,
         int stockMaximum,
+        bool sansSuiviStock,
         bool gestionLot,
+        bool gestionNumeroDeSerie,
         bool gestionDLUO,
         string modifiedBy)
     {
@@ -111,11 +114,13 @@ public class Article : BaseEntity
         Unite = unite;
         PrixAchat = prixAchat;
         PrixVente = prixVente;
-        SeuilAlerte = seuilAlerte;
-        StockMinimum = stockMinimum;
-        StockMaximum = stockMaximum;
-        GestionLot = gestionLot;
-        GestionDLUO = gestionDLUO;
+        SansSuiviStock = sansSuiviStock;
+        SeuilAlerte = sansSuiviStock ? 0 : seuilAlerte;
+        StockMinimum = sansSuiviStock ? 0 : stockMinimum;
+        StockMaximum = sansSuiviStock ? 0 : stockMaximum;
+        GestionLot = sansSuiviStock ? false : gestionLot;
+        GestionNumeroDeSerie = sansSuiviStock ? false : gestionNumeroDeSerie;
+        GestionDLUO = sansSuiviStock ? false : gestionDLUO;
         SetUpdated(modifiedBy);
     }
 
@@ -126,8 +131,8 @@ public class Article : BaseEntity
     }
 
     public bool EstEnAlerteStock(int quantiteTotale)
-        => quantiteTotale <= SeuilAlerte;
+        => !SansSuiviStock && quantiteTotale <= SeuilAlerte;
 
     public bool EstEnRuptureStock(int quantiteTotale)
-        => quantiteTotale <= StockMinimum;
+        => !SansSuiviStock && quantiteTotale <= StockMinimum;
 }

@@ -1,0 +1,520 @@
+@page "/articles/nouveau"
+@page "/articles/modifier/{Id:guid}"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject NavigationManager Nav
+
+<PageTitle>@(IsCreation ? "Nouvel article - GestionStock" : "Modifier article - GestionStock")</PageTitle>
+
+<div class="article-editor-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">@(IsCreation ? "Nouvel article" : "Modifier l'article")</h1>
+            <p class="page-subtitle">Renseignez les informations produit dans une fiche dediee, plus claire et plus confortable a utiliser.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour a la liste</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact article-editor-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Fiche article</span>
+            <h2>@(IsCreation ? "Creez une nouvelle reference sans quitter votre flux de travail" : "Mettez a jour la reference selectionnee dans une fiche dediee")</h2>
+            <p>Les informations produit sont regroupees en sections claires pour faciliter la maintenance, le controle des seuils et la coherence du catalogue.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Identite</span>
+            <span class="surface-pill">Classification</span>
+            <span class="surface-pill">Tarification</span>
+            <span class="surface-pill">Seuils</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <section class="editor-shell">
+            <div class="editor-card">
+                <div class="editor-section">
+                    <div class="form-section-title">Identite</div>
+                    <div class="editor-grid">
+                        <div class="field-group">
+                            <label class="field-label">Code *</label>
+                            <input class="field-input" @bind="fCode" placeholder="ART-001" disabled="@(!IsCreation)" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Code-barres</label>
+                            <input class="field-input" @bind="fCodeBarres" />
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Designation *</label>
+                            <input class="field-input" @bind="fDesignation" />
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Description</label>
+                            <textarea class="field-input field-textarea" @bind="fDescription"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="form-section-title">Classification</div>
+                    <div class="editor-grid">
+                        <div class="field-group">
+                            <label class="field-label">Categorie</label>
+                            <select class="field-input" @bind="fCategorie">
+                                <option value="">Aucune</option>
+                                @foreach (var cat in categories)
+                                {
+                                    <option value="@cat.Libelle">@cat.Libelle</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Unite</label>
+                            <input class="field-input" @bind="fUnite" placeholder="PCS" />
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Famille d'articles</label>
+                            <div class="famille-picker">
+                                <select class="field-input" @bind="fFamilleParentId" @bind:after="OnFamilleParentChanged">
+                                    <option value="">Aucune famille</option>
+                                    @foreach (var f in FamillesRacines)
+                                    {
+                                        <option value="@f.Id">@f.Libelle</option>
+                                    }
+                                </select>
+                                @if (SousFamillesDuParent.Any())
+                                {
+                                    <select class="field-input" @bind="fSousFamilleId" @bind:after="OnSousFamilleChanged">
+                                        <option value="">Toute la famille</option>
+                                        @foreach (var sf in SousFamillesDuParent)
+                                        {
+                                            <option value="@sf.Id">@sf.Libelle</option>
+                                        }
+                                    </select>
+                                }
+                                @if (!string.IsNullOrEmpty(fFamille))
+                                {
+                                    <div class="famille-selected">Selection : <strong>@fFamille</strong></div>
+                                }
+                            </div>
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="check-label article-option-card">
+                                <input type="checkbox" @bind="fSansSuiviStock" />
+                                <span>
+                                    <strong>Article sans suivi de stock</strong>
+                                    <small>Utilisez cette option pour les prestations, services et autres references qui ne doivent pas generer d'alertes de stock.</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="form-section-title">Tarification</div>
+                    <div class="editor-grid">
+                        <div class="field-group">
+                            <label class="field-label">@($"Prix achat ({Devise.Symbol})")</label>
+                            <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fPrixAchat" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">@($"Prix vente ({Devise.Symbol})")</label>
+                            <input class="field-input" type="number" step="@Devise.AmountStep" @bind="fPrixVente" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="form-section-title">Seuils et options</div>
+                    <div class="editor-grid">
+                        @if (fSansSuiviStock)
+                        {
+                            <div class="field-group editor-span-2">
+                                <div class="article-info-banner">
+                                    Le suivi de stock est desactive pour cette reference. Les seuils, alertes et options de lot ne seront pas appliques.
+                                </div>
+                            </div>
+                        }
+                        <div class="field-group">
+                            <label class="field-label">Seuil d'alerte</label>
+                            <input class="field-input" type="number" min="0" @bind="fSeuil" disabled="@fSansSuiviStock" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Stock minimum</label>
+                            <input class="field-input" type="number" min="0" @bind="fStockMin" disabled="@fSansSuiviStock" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Stock maximum <span class="field-hint">(0 = illimite)</span></label>
+                            <input class="field-input" type="number" min="0" @bind="fStockMax" disabled="@fSansSuiviStock" />
+                            @if (!fSansSuiviStock && fStockMax > 0 && fStockMax <= fStockMin)
+                            {
+                                <span class="field-error">Le stock maximum doit etre superieur au stock minimum.</span>
+                            }
+                        </div>
+                        <div class="field-group field-checks">
+                            <label class="check-label">
+                                <input type="checkbox" @bind="fGestionLot" disabled="@fSansSuiviStock" /> Gestion par lot
+                            </label>
+                            <label class="check-label">
+                                <input type="checkbox" @bind="fGestionNumeroDeSerie" disabled="@fSansSuiviStock" /> Gestion par numero de serie
+                            </label>
+                            <label class="check-label">
+                                <input type="checkbox" @bind="fGestionDLUO" disabled="@fSansSuiviStock" /> Gestion DLUO / DLC
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="editor-side">
+                <div class="editor-side-card">
+                    <h3>Reperes</h3>
+                    <ul class="editor-hints">
+                        <li>Le code article reste fige apres creation.</li>
+                        <li>Le stock maximum a 0 signifie sans limite.</li>
+                        <li>Une famille sans suivi de stock peut convenir aux prestations et services.</li>
+                    </ul>
+                </div>
+                <div class="editor-side-card">
+                    <h3>Apercu</h3>
+                    <dl class="editor-preview">
+                        <div>
+                            <dt>Reference</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(fCode) ? "—" : fCode)</dd>
+                        </div>
+                        <div>
+                            <dt>Designation</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(fDesignation) ? "—" : fDesignation)</dd>
+                        </div>
+                        <div>
+                            <dt>Famille</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(fFamille) ? "—" : fFamille)</dd>
+                        </div>
+                        <div>
+                            <dt>Suivi stock</dt>
+                            <dd>@(fSansSuiviStock ? "Sans suivi" : "Avec suivi")</dd>
+                        </div>
+                        <div>
+                            <dt>Prix vente</dt>
+                            <dd>@string.Format("{0:N" + Devise.AmountDecimals + "} {1}", NormalizeAmount(fPrixVente), Devise.Symbol)</dd>
+                        </div>
+                    </dl>
+                </div>
+            </aside>
+        </section>
+
+        <div class="editor-footer">
+            <div class="editor-footer-left">
+                @if (!IsCreation)
+                {
+                    <button class="btn-danger-outline" @onclick="DesactiverArticle" disabled="@saving">Desactiver</button>
+                }
+            </div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                <button class="btn btn-primary" @onclick="Sauvegarder" disabled="@saving">
+                    @(saving ? "Enregistrement..." : IsCreation ? "Creer l'article" : "Enregistrer")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool IsCreation => Id == null || Id == Guid.Empty;
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private string fCode = string.Empty;
+    private string fCodeBarres = string.Empty;
+    private string fDesignation = string.Empty;
+    private string fDescription = string.Empty;
+    private string fCategorie = string.Empty;
+    private string fFamille = string.Empty;
+    private string fUnite = "PCS";
+    private decimal fPrixAchat;
+    private decimal fPrixVente;
+    private int fSeuil = 5;
+    private int fStockMin;
+    private int fStockMax = 100;
+    private bool fSansSuiviStock;
+    private bool fGestionLot;
+    private bool fGestionNumeroDeSerie;
+    private bool fGestionDLUO;
+    private string fFamilleParentId = string.Empty;
+    private string fSousFamilleId = string.Empty;
+
+    private List<FamilleArticleDto> familles = new();
+    private List<CategorieDto> categories = new();
+
+    private IEnumerable<FamilleArticleDto> FamillesRacines =>
+        familles.Where(f => f.ParentId == null && f.EstActif);
+
+    private IEnumerable<FamilleArticleDto> SousFamillesDuParent =>
+        string.IsNullOrEmpty(fFamilleParentId)
+            ? Enumerable.Empty<FamilleArticleDto>()
+            : familles.Where(f => f.ParentId.HasValue && f.ParentId.Value.ToString() == fFamilleParentId && f.EstActif);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        familles = await Api.GetFamillesAsync() ?? new();
+        categories = await Api.GetCategoriesAsync() ?? new();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        chargement = true;
+        message = null;
+
+        if (IsCreation)
+        {
+            ResetForm();
+            chargement = false;
+            return;
+        }
+
+        var article = await Api.GetArticleAsync(Id!.Value);
+        if (article is null)
+        {
+            msgCls = "alert-error";
+            message = "Article introuvable.";
+            chargement = false;
+            return;
+        }
+
+        ChargerArticle(article);
+        chargement = false;
+    }
+
+    private void ResetForm()
+    {
+        fCode = string.Empty;
+        fCodeBarres = string.Empty;
+        fDesignation = string.Empty;
+        fDescription = string.Empty;
+        fCategorie = string.Empty;
+        fFamille = string.Empty;
+        fUnite = "PCS";
+        fPrixAchat = NormalizeAmount(0);
+        fPrixVente = NormalizeAmount(0);
+        fSeuil = 5;
+        fStockMin = 0;
+        fStockMax = 100;
+        fSansSuiviStock = false;
+        fGestionLot = false;
+        fGestionNumeroDeSerie = false;
+        fGestionDLUO = false;
+        fFamilleParentId = string.Empty;
+        fSousFamilleId = string.Empty;
+    }
+
+    private void ChargerArticle(ArticleDto art)
+    {
+        fCode = art.Code;
+        fCodeBarres = art.CodeBarres;
+        fDesignation = art.Designation;
+        fDescription = art.Description;
+        fCategorie = art.Categorie;
+        fFamille = art.FamilleArticle;
+        fUnite = art.Unite;
+        fPrixAchat = NormalizeAmount(art.PrixAchat);
+        fPrixVente = NormalizeAmount(art.PrixVente);
+        fSeuil = art.SeuilAlerte;
+        fStockMin = art.StockMinimum;
+        fStockMax = art.StockMaximum;
+        fSansSuiviStock = art.SansSuiviStock;
+        fGestionLot = art.GestionLot;
+        fGestionNumeroDeSerie = art.GestionNumeroDeSerie;
+        fGestionDLUO = art.GestionDLUO;
+
+        fFamilleParentId = string.Empty;
+        fSousFamilleId = string.Empty;
+
+        if (!string.IsNullOrEmpty(fFamille))
+        {
+            var sousFamille = familles.FirstOrDefault(f => f.Libelle == fFamille && f.ParentId != null);
+            if (sousFamille is not null)
+            {
+                fFamilleParentId = sousFamille.ParentId!.Value.ToString();
+                fSousFamilleId = sousFamille.Id.ToString();
+            }
+            else
+            {
+                var parent = familles.FirstOrDefault(f => f.Libelle == fFamille && f.ParentId == null);
+                if (parent is not null)
+                {
+                    fFamilleParentId = parent.Id.ToString();
+                }
+            }
+        }
+    }
+
+    private void OnFamilleParentChanged()
+    {
+        fSousFamilleId = string.Empty;
+        if (string.IsNullOrEmpty(fFamilleParentId))
+        {
+            fFamille = string.Empty;
+            return;
+        }
+
+        var parent = familles.FirstOrDefault(f => f.Id.ToString() == fFamilleParentId);
+        fFamille = parent?.Libelle ?? string.Empty;
+        ApplyFamilleStockPolicy();
+    }
+
+    private void OnSousFamilleChanged()
+    {
+        if (string.IsNullOrEmpty(fSousFamilleId))
+        {
+            var parent = familles.FirstOrDefault(f => f.Id.ToString() == fFamilleParentId);
+            fFamille = parent?.Libelle ?? string.Empty;
+            ApplyFamilleStockPolicy();
+            return;
+        }
+
+        var sf = familles.FirstOrDefault(f => f.Id.ToString() == fSousFamilleId);
+        fFamille = sf?.Libelle ?? string.Empty;
+        ApplyFamilleStockPolicy();
+    }
+
+    private void ApplyFamilleStockPolicy()
+    {
+        FamilleArticleDto? famille = null;
+
+        if (!string.IsNullOrEmpty(fSousFamilleId))
+        {
+            famille = familles.FirstOrDefault(f => f.Id.ToString() == fSousFamilleId);
+        }
+
+        famille ??= !string.IsNullOrEmpty(fFamilleParentId)
+            ? familles.FirstOrDefault(f => f.Id.ToString() == fFamilleParentId)
+            : null;
+
+        if (famille?.SansSuiviStock == true)
+        {
+            fSansSuiviStock = true;
+        }
+    }
+
+    private async Task Sauvegarder()
+    {
+        if (string.IsNullOrWhiteSpace(fCode) || string.IsNullOrWhiteSpace(fDesignation))
+        {
+            msgCls = "alert-error";
+            message = "Le code et la designation sont obligatoires.";
+            return;
+        }
+
+        if (!fSansSuiviStock && fStockMax > 0 && fStockMax <= fStockMin)
+        {
+            msgCls = "alert-error";
+            message = "Le stock maximum doit etre superieur au stock minimum.";
+            return;
+        }
+
+        saving = true;
+        fPrixAchat = NormalizeAmount(fPrixAchat);
+        fPrixVente = NormalizeAmount(fPrixVente);
+
+        var seuil = fSansSuiviStock ? 0 : fSeuil;
+        var stockMin = fSansSuiviStock ? 0 : fStockMin;
+        var stockMax = fSansSuiviStock ? 0 : fStockMax;
+        var gestionLot = fSansSuiviStock ? false : fGestionLot;
+        var gestionNumeroDeSerie = fSansSuiviStock ? false : fGestionNumeroDeSerie;
+        var gestionDluo = fSansSuiviStock ? false : fGestionDLUO;
+
+        ResultDto? result;
+        if (IsCreation)
+        {
+            result = await Api.CreerArticleAsync(new CreerArticleDto(
+                fCode,
+                fCodeBarres,
+                fDesignation,
+                fDescription,
+                fCategorie,
+                fFamille,
+                fUnite,
+                fPrixAchat,
+                fPrixVente,
+                seuil,
+                stockMin,
+                stockMax,
+                fSansSuiviStock,
+                gestionLot,
+                gestionNumeroDeSerie,
+                gestionDluo,
+                null));
+        }
+        else
+        {
+            result = await Api.ModifierArticleAsync(Id!.Value, new ModifierArticleDto(
+                Id.Value,
+                fDesignation,
+                fDescription,
+                fCategorie,
+                fFamille,
+                fUnite,
+                fPrixAchat,
+                fPrixVente,
+                seuil,
+                stockMin,
+                stockMax,
+                fSansSuiviStock,
+                gestionLot,
+                gestionNumeroDeSerie,
+                gestionDluo,
+                null));
+        }
+
+        saving = false;
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message ?? "Une erreur est survenue.";
+
+        if (result?.Succes == true)
+        {
+            Nav.NavigateTo("/articles");
+        }
+    }
+
+    private async Task DesactiverArticle()
+    {
+        if (IsCreation || Id is null)
+        {
+            return;
+        }
+
+        saving = true;
+        var result = await Api.DesactiverArticleAsync(Id.Value);
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message ?? "Une erreur est survenue.";
+
+        if (result?.Succes == true)
+        {
+            Nav.NavigateTo("/articles");
+        }
+    }
+
+    private void RetourListe()
+        => Nav.NavigateTo("/articles");
+
+    private decimal NormalizeAmount(decimal value)
+        => Math.Round(value, Devise.AmountDecimals, MidpointRounding.AwayFromZero);
+}

@@ -1,0 +1,266 @@
+@page "/familles/nouveau"
+@page "/familles/modifier/{Id:guid}"
+@attribute [Authorize]
+@inject IApiService Api
+@inject NavigationManager Nav
+
+<PageTitle>@(IsCreation ? "Nouvelle famille - GestionStock" : "Modifier famille - GestionStock")</PageTitle>
+
+<div class="famille-editor-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">@(IsCreation ? "Nouvelle famille d'articles" : "Modifier la famille")</h1>
+            <p class="page-subtitle">Renseignez la classification, le suivi de stock et la hierarchie de la famille dans une fiche dediee.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour a la liste</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact famille-editor-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Classification</span>
+            <h2>@(IsCreation ? "Creez une famille claire et reutilisable" : "Mettez a jour la famille selectionnee dans un espace dedie")</h2>
+            <p>Utilisez une structure simple pour classer les articles, creer des sous-familles et definir si certaines references ne doivent pas suivre de stock.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Code</span>
+            <span class="surface-pill">Hierarchie</span>
+            <span class="surface-pill">Couleur</span>
+            <span class="surface-pill">Suivi stock</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <section class="editor-shell">
+            <div class="editor-card">
+                <div class="editor-section">
+                    <div class="form-section-title">Identite</div>
+                    <div class="editor-grid">
+                        <div class="field-group">
+                            <label class="field-label">Code *</label>
+                            <input class="field-input" @bind="fCode" placeholder="FAM-01" disabled="@(!IsCreation)" />
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Libelle *</label>
+                            <input class="field-input" @bind="fLibelle" />
+                        </div>
+                        <div class="field-group editor-span-3">
+                            <label class="field-label">Description</label>
+                            <textarea class="field-input field-textarea" @bind="fDescription"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="form-section-title">Hierarchie</div>
+                    <div class="editor-grid">
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Famille parente</label>
+                            <select class="field-input" @bind="fParentIdStr">
+                                <option value="">Aucune (famille racine)</option>
+                                @foreach (var f in familles.Where(x => x.EstActif && x.Id != Id))
+                                {
+                                    <option value="@f.Id">@f.Libelle</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Ordre d'affichage</label>
+                            <input class="field-input" type="number" @bind="fOrdre" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Couleur</label>
+                            <div class="color-picker-row">
+                                <input type="color" class="field-color" @bind="fCouleur" />
+                                <input class="field-input" @bind="fCouleur" placeholder="#6366f1" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="form-section-title">Comportement</div>
+                    <div class="editor-grid">
+                        <div class="field-group editor-span-3">
+                            <label class="check-label article-option-card">
+                                <input type="checkbox" @bind="fSansSuiviStock" />
+                                <span>
+                                    <strong>Famille sans suivi de stock</strong>
+                                    <small>Activez cette option pour les prestations, services et autres references qui ne doivent pas gerer de quantites en stock.</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="editor-side">
+                <div class="editor-side-card">
+                    <h3>Reperes</h3>
+                    <ul class="editor-hints">
+                        <li>Le code reste fige apres creation.</li>
+                        <li>Une famille racine peut accueillir plusieurs sous-familles.</li>
+                        <li>Le mode sans suivi convient aux services et prestations.</li>
+                    </ul>
+                </div>
+                <div class="editor-side-card">
+                    <h3>Apercu</h3>
+                    <dl class="editor-preview">
+                        <div>
+                            <dt>Code</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(fCode) ? "—" : fCode)</dd>
+                        </div>
+                        <div>
+                            <dt>Libelle</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(fLibelle) ? "—" : fLibelle)</dd>
+                        </div>
+                        <div>
+                            <dt>Parente</dt>
+                            <dd>@(ParentLibellePreview)</dd>
+                        </div>
+                        <div>
+                            <dt>Suivi stock</dt>
+                            <dd>@(fSansSuiviStock ? "Sans suivi" : "Avec suivi")</dd>
+                        </div>
+                    </dl>
+                </div>
+            </aside>
+        </section>
+
+        <div class="editor-footer">
+            <div class="editor-footer-left">
+                @if (!IsCreation)
+                {
+                    <button class="btn-danger-outline" @onclick="Desactiver" disabled="@saving">Desactiver</button>
+                }
+            </div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                <button class="btn btn-primary" @onclick="Sauvegarder" disabled="@saving">
+                    @(saving ? "Enregistrement..." : IsCreation ? "Creer la famille" : "Enregistrer")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "parentId")] public Guid? ParentId { get; set; }
+
+    private bool IsCreation => !Id.HasValue || Id == Guid.Empty;
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private List<FamilleArticleDto> familles = new();
+    private string fCode = string.Empty;
+    private string fLibelle = string.Empty;
+    private string fDescription = string.Empty;
+    private string fCouleur = "#6366f1";
+    private string fParentIdStr = string.Empty;
+    private int fOrdre;
+    private bool fSansSuiviStock;
+
+    private string ParentLibellePreview =>
+        familles.FirstOrDefault(x => x.Id.ToString() == fParentIdStr)?.Libelle ?? "Aucune";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        chargement = true;
+        familles = await Api.GetFamillesAsync(false) ?? new();
+
+        if (IsCreation)
+        {
+            fParentIdStr = ParentId?.ToString() ?? string.Empty;
+            fCouleur = "#6366f1";
+            fOrdre = 0;
+            fSansSuiviStock = false;
+        }
+        else
+        {
+            var famille = familles.FirstOrDefault(x => x.Id == Id);
+            if (famille is null)
+            {
+                msgCls = "alert-error";
+                message = "Famille introuvable.";
+            }
+            else
+            {
+                fCode = famille.Code;
+                fLibelle = famille.Libelle;
+                fDescription = famille.Description ?? string.Empty;
+                fCouleur = string.IsNullOrWhiteSpace(famille.Couleur) ? "#6366f1" : famille.Couleur ?? "#6366f1";
+                fOrdre = famille.Ordre;
+                fSansSuiviStock = famille.SansSuiviStock;
+                fParentIdStr = famille.ParentId?.ToString() ?? string.Empty;
+            }
+        }
+
+        chargement = false;
+    }
+
+    private async Task Sauvegarder()
+    {
+        saving = true;
+        Guid? parentId = string.IsNullOrWhiteSpace(fParentIdStr) ? null : Guid.Parse(fParentIdStr);
+
+        var dto = new FamilleRequest
+        {
+            Code = fCode,
+            Libelle = fLibelle,
+            Description = fDescription,
+            ParentId = parentId,
+            Couleur = fCouleur,
+            Ordre = fOrdre,
+            SansSuiviStock = fSansSuiviStock
+        };
+
+        var result = IsCreation
+            ? await Api.CreerFamilleAsync(dto)
+            : await Api.ModifierFamilleAsync(Id!.Value, dto);
+
+        saving = false;
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+
+        if (result?.Succes == true)
+        {
+            Nav.NavigateTo("/familles");
+        }
+    }
+
+    private async Task Desactiver()
+    {
+        if (!Id.HasValue)
+            return;
+
+        saving = true;
+        var result = await Api.DesactiverFamilleAsync(Id.Value);
+        saving = false;
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+
+        if (result?.Succes == true)
+        {
+            Nav.NavigateTo("/familles");
+        }
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/familles");
+}

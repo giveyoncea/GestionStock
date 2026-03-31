@@ -85,7 +85,8 @@ public class ArticleService : IArticleService
             article.Modifier(dto.Designation, dto.Description, dto.Categorie,
                 dto.FamilleArticle, dto.Unite,
                 dto.PrixAchat, dto.PrixVente, dto.SeuilAlerte,
-                dto.StockMinimum, dto.StockMaximum, dto.GestionLot, dto.GestionDLUO, userId);
+                dto.StockMinimum, dto.StockMaximum, dto.SansSuiviStock,
+                dto.GestionLot, dto.GestionNumeroDeSerie, dto.GestionDLUO, userId);
 
             await _uow.Articles.AddAsync(article, ct);
 
@@ -115,7 +116,8 @@ public class ArticleService : IArticleService
         article.Modifier(dto.Designation, dto.Description, dto.Categorie,
             dto.FamilleArticle, dto.Unite,
             dto.PrixAchat, dto.PrixVente, dto.SeuilAlerte,
-            dto.StockMinimum, dto.StockMaximum, dto.GestionLot, dto.GestionDLUO, userId);
+            dto.StockMinimum, dto.StockMaximum, dto.SansSuiviStock,
+            dto.GestionLot, dto.GestionNumeroDeSerie, dto.GestionDLUO, userId);
 
         _uow.Articles.Update(article);
 
@@ -161,7 +163,7 @@ public class ArticleService : IArticleService
         a.Id, a.Code, a.CodeBarres, a.Designation, a.Description,
         a.Categorie, a.FamilleArticle, a.Unite,
         a.PrixAchat, a.PrixVente, a.SeuilAlerte, a.StockMinimum, a.StockMaximum,
-        a.GestionLot, a.GestionDLUO, a.Statut, qte,
+        a.SansSuiviStock, a.GestionLot, a.GestionNumeroDeSerie, a.GestionDLUO, a.Statut, qte,
         a.EstEnAlerteStock(qte), a.EstEnRuptureStock(qte),
         a.FournisseurPrincipal?.RaisonSociale, a.CreatedAt);
 }

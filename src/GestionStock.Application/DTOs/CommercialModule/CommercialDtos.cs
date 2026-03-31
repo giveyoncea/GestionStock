@@ -96,6 +96,7 @@ public record CommercialVenteLigneDto(
     decimal MontantTVA,
     decimal MontantTTC,
     string? NumeroLot,
+    string? NumeroSerie,
     int Ordre,
     string? ArticleCode
 );
@@ -112,7 +113,8 @@ public record CommercialVenteLigneRequestDto(
     decimal PrixUnitaireHT,
     decimal TauxRemise,
     decimal TauxTVA,
-    string? NumeroLot
+    string? NumeroLot,
+    string? NumeroSerie
 );
 
 public record CommercialVenteRequestDto(
@@ -193,6 +195,7 @@ public record CommercialAchatLigneDto(
     decimal TauxTVA,
     decimal MontantTTC,
     string? NumeroLot,
+    string? NumeroSerie,
     int Ordre,
     string? ArticleCode
 );
@@ -209,7 +212,8 @@ public record CommercialAchatLigneRequestDto(
     decimal PrixUnitaireHT,
     decimal TauxRemise,
     decimal TauxTVA,
-    string? NumeroLot
+    string? NumeroLot,
+    string? NumeroSerie
 );
 
 public record CommercialAchatRequestDto(

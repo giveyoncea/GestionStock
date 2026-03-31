@@ -225,18 +225,18 @@ else if (dashboard != null)
     private string GetHeroTitle()
     {
         if (dashboard is null)
-            return "PrÃ©paration des indicateurs en cours";
+            return "Préparation des indicateurs en cours";
 
         if (dashboard.ArticlesEnRupture > 0)
             return "Des ruptures demandent une action rapide";
 
         if (dashboard.ArticlesEnAlerte > 0)
-            return "Quelques seuils de stock mÃ©ritent une vigilance particuliÃ¨re";
+            return "Quelques seuils de stock méritent une vigilance particulière";
 
         if (dashboard.CommandesEnAttente > 0)
-            return "Les commandes en attente constituent la prochaine prioritÃ©";
+            return "Les commandes en attente constituent la prochaine priorité";
 
-        return "L'activitÃ© est globalement sous contrÃ´le";
+        return "L'activité est globalement sous contrôle";
     }
 
     private string GetHeroText()
@@ -245,14 +245,14 @@ else if (dashboard != null)
             return "Les principaux indicateurs et raccourcis seront disponibles dans un instant.";
 
         if (dashboard.ArticlesEnRupture > 0)
-            return "Commencez par les articles en rupture, puis vÃ©rifiez les commandes urgentes pour Ã©viter les blocages opÃ©rationnels.";
+            return "Commencez par les articles en rupture, puis vérifiez les commandes urgentes pour éviter les blocages opérationnels.";
 
         if (dashboard.ArticlesEnAlerte > 0)
-            return "Les alertes restent gÃ©rables. Une revue rapide des mouvements et des seuils peut Ã©viter des ruptures Ã  court terme.";
+            return "Les alertes restent gérables. Une revue rapide des mouvements et des seuils peut éviter des ruptures à court terme.";
 
         if (dashboard.CommandesEnAttente > 0)
             return "Les approvisionnements semblent corrects, mais plusieurs commandes attendent encore une action ou un suivi.";
 
-        return "Aucune alerte majeure pour le moment. Utilisez ce tableau de bord comme point d'entrÃ©e pour piloter la journÃ©e.";
+        return "Aucune alerte majeure pour le moment. Utilisez ce tableau de bord comme point d'entrée pour piloter la journée.";
     }
 }

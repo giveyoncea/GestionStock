@@ -1,0 +1,172 @@
+@page "/stocks/transfert"
+@attribute [Authorize]
+@inject IApiService Api
+@inject NavigationManager Nav
+
+<PageTitle>Transfert de stock - GestionStock</PageTitle>
+
+<div class="stock-operation-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Transfert de stock</h1>
+            <p class="page-subtitle">Deplacez un article d'un emplacement a un autre dans un ecran dedie.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux stocks</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact stock-operation-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Mouvement interne</span>
+            <h2>Transferez un stock entre emplacements sans perdre la trace du lot.</h2>
+            <p>Choisissez clairement la source, la destination et la quantite afin de fiabiliser les mouvements internes.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Source</span>
+            <span class="surface-pill">Destination</span>
+            <span class="surface-pill">Quantite</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <section class="editor-shell">
+            <div class="editor-card">
+                <div class="editor-section">
+                    <div class="form-section-title">Transfert</div>
+                    <div class="editor-grid">
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Article *</label>
+                            <select class="field-input" @bind="selectedArticleId">
+                                <option value="@Guid.Empty">Selectionner</option>
+                                @foreach (var s in stocks)
+                                {
+                                    <option value="@s.ArticleId">[@s.ArticleCode] @s.ArticleDesignation</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Emplacement source *</label>
+                            <select class="field-input" @bind="emplacementSourceId">
+                                <option value="@Guid.Empty">Selectionner</option>
+                                @foreach (var e in emplacements)
+                                {
+                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Emplacement destination *</label>
+                            <select class="field-input" @bind="emplacementDestId">
+                                <option value="@Guid.Empty">Selectionner</option>
+                                @foreach (var e in emplacements)
+                                {
+                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Quantite *</label>
+                            <input class="field-input" type="number" min="1" @bind="quantite" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">No lot</label>
+                            <input class="field-input" @bind="numeroLot" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="editor-side">
+                <div class="editor-side-card">
+                    <h3>Reperes</h3>
+                    <ul class="editor-hints">
+                        <li>La source et la destination doivent etre differentes.</li>
+                        <li>Le transfert n'impacte pas la valeur globale du stock.</li>
+                    </ul>
+                </div>
+            </aside>
+        </section>
+
+        <div class="editor-footer">
+            <div></div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                <button class="btn btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Transferer")</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<StockResumeDto> stocks = new();
+    private List<EmplacementDto> emplacements = new();
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private Guid selectedArticleId = Guid.Empty;
+    private Guid emplacementSourceId = Guid.Empty;
+    private Guid emplacementDestId = Guid.Empty;
+    private int quantite = 1;
+    private string? numeroLot;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Charger();
+    }
+
+    private async Task Charger()
+    {
+        chargement = true;
+        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
+        emplacements = (await Api.GetEmplacementsAsync()) ?? new();
+        chargement = false;
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/stocks");
+
+    private async Task Enregistrer()
+    {
+        if (selectedArticleId == Guid.Empty || emplacementSourceId == Guid.Empty || emplacementDestId == Guid.Empty || quantite <= 0)
+        {
+            msgCls = "alert-error";
+            message = "Renseignez les champs obligatoires avant d'enregistrer.";
+            return;
+        }
+
+        if (emplacementSourceId == emplacementDestId)
+        {
+            msgCls = "alert-error";
+            message = "La source et la destination doivent etre differentes.";
+            return;
+        }
+
+        saving = true;
+        var result = await Api.TransfertStockAsync(new TransfertRequest
+        {
+            ArticleId = selectedArticleId,
+            EmplacementSourceId = emplacementSourceId,
+            EmplacementDestinationId = emplacementDestId,
+            Quantite = quantite,
+            NumeroLot = numeroLot
+        });
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            Nav.NavigateTo("/stocks");
+        }
+    }
+}

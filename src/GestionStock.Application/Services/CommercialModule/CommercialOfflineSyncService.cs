@@ -262,7 +262,8 @@ public class CommercialOfflineSyncService : ICommercialOfflineSyncService
             ligne.PrixUnitaireHT,
             ligne.TauxRemise,
             ligne.TauxTVA,
-            ligne.NumeroLot);
+            ligne.NumeroLot,
+            null);
     }
 
     private static CommercialAchatLigneRequestDto MapAchatLigneRequest(CommercialOfflineAchatLignePayloadDto ligne)
@@ -274,7 +275,8 @@ public class CommercialOfflineSyncService : ICommercialOfflineSyncService
             ligne.PrixUnitaireHT,
             ligne.TauxRemise,
             ligne.TauxTVA,
-            ligne.NumeroLot);
+            ligne.NumeroLot,
+            null);
     }
 
     private static CommercialClientRequestDto MapClientRequest(CommercialOfflineClientPayloadDto payload)

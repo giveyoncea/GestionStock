@@ -1,0 +1,193 @@
+@page "/stocks/sortie"
+@attribute [Authorize]
+@inject IApiService Api
+@inject NavigationManager Nav
+@inject ICurrencyService Devise
+
+<PageTitle>Sortie de stock - GestionStock</PageTitle>
+
+<div class="stock-operation-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Sortie de stock</h1>
+            <p class="page-subtitle">Enregistrez une sortie en conservant une trace claire du motif et de la reference.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux stocks</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact stock-operation-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Flux sortant</span>
+            <h2>Diminuez un stock dans une fiche simple et securisee.</h2>
+            <p>Choisissez l'article, l'emplacement et la quantite pour enregistrer une consommation, une livraison ou une correction.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Quantite</span>
+            <span class="surface-pill">Reference</span>
+            <span class="surface-pill">Motif</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <section class="editor-shell">
+            <div class="editor-card">
+                <div class="editor-section">
+                    <div class="form-section-title">Saisie</div>
+                    <div class="editor-grid">
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Article *</label>
+                            <select class="field-input" @bind="selectedArticleId" @bind:after="OnArticleChanged">
+                                <option value="@Guid.Empty">Selectionner</option>
+                                @foreach (var s in stocks)
+                                {
+                                    <option value="@s.ArticleId">[@s.ArticleCode] @s.ArticleDesignation</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Emplacement *</label>
+                            <select class="field-input" @bind="selectedEmplacementId">
+                                <option value="@Guid.Empty">Selectionner</option>
+                                @foreach (var e in emplacements)
+                                {
+                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Quantite *</label>
+                            <input class="field-input" type="number" min="1" @bind="quantite" disabled="@ArticleSerialise" />
+                        </div>
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Reference *</label>
+                            <input class="field-input" @bind="reference" placeholder="SO-2026-001" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">No lot</label>
+                            <input class="field-input" @bind="numeroLot" />
+                        </div>
+                        @if (ArticleSerialise)
+                        {
+                            <div class="field-group">
+                                <label class="field-label">Numero de serie *</label>
+                                <input class="field-input" @bind="numeroSerie" placeholder="SN-000001" />
+                            </div>
+                        }
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Motif</label>
+                            <input class="field-input" @bind="motif" placeholder="Livraison, consommation, casse..." />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="editor-side">
+                <div class="editor-side-card">
+                    <h3>Reperes</h3>
+                    <ul class="editor-hints">
+                        <li>Utilisez un motif explicite pour faciliter les controles.</li>
+                        <li>La reference peut correspondre a un BL, une mission ou un ordre interne.</li>
+                        <li>Pour un article serialize, la quantite est fixee a 1 et le numero de serie devient obligatoire.</li>
+                    </ul>
+                </div>
+            </aside>
+        </section>
+
+        <div class="editor-footer">
+            <div></div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                <button class="btn btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer la sortie")</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<StockResumeDto> stocks = new();
+    private List<EmplacementDto> emplacements = new();
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private Guid selectedArticleId = Guid.Empty;
+    private Guid selectedEmplacementId = Guid.Empty;
+    private int quantite = 1;
+    private string reference = string.Empty;
+    private string? numeroLot;
+    private string? numeroSerie;
+    private string? motif;
+    private ArticleDto? selectedArticle;
+    private bool ArticleSerialise => selectedArticle?.GestionNumeroDeSerie == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await Charger();
+    }
+
+    private async Task Charger()
+    {
+        chargement = true;
+        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
+        emplacements = (await Api.GetEmplacementsAsync()) ?? new();
+        chargement = false;
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/stocks");
+
+    private async Task OnArticleChanged()
+    {
+        selectedArticle = selectedArticleId == Guid.Empty
+            ? null
+            : await Api.GetArticleAsync(selectedArticleId);
+
+        if (ArticleSerialise)
+        {
+            quantite = 1;
+        }
+        else
+        {
+            numeroSerie = null;
+        }
+    }
+
+    private async Task Enregistrer()
+    {
+        if (selectedArticleId == Guid.Empty || selectedEmplacementId == Guid.Empty || quantite <= 0 || string.IsNullOrWhiteSpace(reference))
+        {
+            msgCls = "alert-error";
+            message = "Renseignez les champs obligatoires avant d'enregistrer.";
+            return;
+        }
+
+        saving = true;
+        var result = await Api.SortieStockAsync(new SortieStockDto(
+            selectedArticleId,
+            selectedEmplacementId,
+            quantite,
+            reference,
+            numeroLot,
+            numeroSerie,
+            motif));
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            Nav.NavigateTo("/stocks");
+        }
+    }
+}

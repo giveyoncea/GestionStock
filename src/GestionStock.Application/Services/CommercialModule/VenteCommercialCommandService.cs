@@ -37,6 +37,9 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
             await using var conn = new SqlConnection(_connectionStringProvider.GetCurrentConnectionString());
             await conn.OpenAsync(ct);
             await EnsureCommercialTablesAsync(conn, ct);
+            var validation = await ValiderLignesAsync(conn, dto.TypeDocument, dto.Lignes, ct);
+            if (!validation.Succes)
+                return (validation, null, null);
             return await CreateVenteCoreAsync(conn, dto, userId, ct);
         }
         catch (Exception ex)
@@ -56,7 +59,6 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
             await using var conn = new SqlConnection(_connectionStringProvider.GetCurrentConnectionString());
             await conn.OpenAsync(ct);
             await EnsureCommercialTablesAsync(conn, ct);
-
             int typeDocument;
             int statut;
             bool estVerrouille;
@@ -72,6 +74,10 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
                 statut = reader.GetInt32(1);
                 estVerrouille = reader.GetBoolean(2);
             }
+
+            var validation = await ValiderLignesAsync(conn, typeDocument, dto.Lignes, ct);
+            if (!validation.Succes)
+                return validation;
 
             if (estVerrouille || NormalizeSimpleStatus(statut) != 1)
                 return ResultDto.Erreur("Seuls les documents au statut Saisi sont modifiables.");
@@ -330,7 +336,7 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
 
             var lignes = new List<CommercialVenteLigneRequestDto>();
             await using (var lCmd = new SqlCommand(@"
-                SELECT ArticleId, Designation, Quantite, PrixUnitaireHT, TauxRemise, TauxTVA, NumeroLot
+                SELECT ArticleId, Designation, Quantite, PrixUnitaireHT, TauxRemise, TauxTVA, NumeroLot, NumeroSerie
                 FROM LignesDocumentVente
                 WHERE DocumentId=@id
                 ORDER BY Ordre", conn))
@@ -346,7 +352,8 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
                         reader.GetDecimal(3),
                         reader.GetDecimal(4),
                         reader.GetDecimal(5),
-                        reader.IsDBNull(6) ? null : reader.GetString(6)));
+                        reader.IsDBNull(6) ? null : reader.GetString(6),
+                        reader.IsDBNull(7) ? null : reader.GetString(7)));
                 }
             }
 
@@ -448,8 +455,8 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
 
             await using var cmd = new SqlCommand(@"
                 INSERT INTO LignesDocumentVente (Id,DocumentId,ArticleId,Designation,Quantite,QuantiteLivree,
-                    PrixUnitaireHT,TauxRemise,MontantRemise,PrixNetHT,TauxTVA,MontantTVA,MontantTTC,NumeroLot,Ordre)
-                VALUES (NEWID(),@doc,@art,@des,@qte,0,@pu,@trem,@mrem,@pnet,@ttva,@mtva,@mttc,@lot,@ord)", conn);
+                    PrixUnitaireHT,TauxRemise,MontantRemise,PrixNetHT,TauxTVA,MontantTVA,MontantTTC,NumeroLot,NumeroSerie,Ordre)
+                VALUES (NEWID(),@doc,@art,@des,@qte,0,@pu,@trem,@mrem,@pnet,@ttva,@mtva,@mttc,@lot,@serie,@ord)", conn);
 
             cmd.Parameters.AddWithValue("@doc", documentId);
             cmd.Parameters.AddWithValue("@art", ligne.ArticleId);
@@ -463,9 +470,115 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
             cmd.Parameters.AddWithValue("@mtva", montantTva);
             cmd.Parameters.AddWithValue("@mttc", montantTtc);
             cmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@ord", i + 1);
             await cmd.ExecuteNonQueryAsync(ct);
         }
+    }
+
+    private static async Task<ResultDto> ValiderLignesAsync(
+        SqlConnection conn,
+        int typeDocument,
+        IReadOnlyList<CommercialVenteLigneRequestDto> lignes,
+        CancellationToken ct)
+    {
+        var saisieNumeroSerieApplicable = TypeDocumentExigeNumeroSerie(typeDocument);
+
+        foreach (var ligne in lignes)
+        {
+            var regles = await GetArticleStockRulesAsync(conn, ligne.ArticleId, ct);
+            if (!regles.Exists)
+                return ResultDto.Erreur($"Article introuvable pour la ligne '{ligne.Designation}'.");
+
+            if (regles.SansSuiviStock)
+                continue;
+
+            if (!regles.GestionNumeroDeSerie)
+                continue;
+
+            if (!saisieNumeroSerieApplicable)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                return ResultDto.Erreur($"Le numero de serie est obligatoire pour l'article '{ligne.Designation}'.");
+
+            if (ligne.Quantite != 1)
+                return ResultDto.Erreur($"L'article serialize '{ligne.Designation}' doit avoir une quantite egale a 1.");
+        }
+
+        return ResultDto.Ok();
+    }
+
+    private static bool TypeDocumentExigeNumeroSerie(int typeDocument)
+        => typeDocument is 3 or 4 or 5;
+
+    private static async Task<(bool Exists, bool SansSuiviStock, bool GestionNumeroDeSerie)> GetArticleStockRulesAsync(
+        SqlConnection conn,
+        Guid articleId,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(@"
+            SELECT
+                ISNULL(SansSuiviStock,0),
+                ISNULL(GestionNumeroDeSerie,0)
+            FROM Articles
+            WHERE Id=@id", conn);
+        cmd.Parameters.AddWithValue("@id", articleId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return (false, false, false);
+
+        return (true, reader.GetBoolean(0), reader.GetBoolean(1));
+    }
+
+    private static async Task<bool> IsNumeroSerieDisponibleAsync(
+        SqlConnection conn,
+        Guid articleId,
+        string numeroSerie,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(@"
+            SELECT ISNULL(SUM(
+                CASE TypeMouvement
+                    WHEN 1 THEN Quantite
+                    WHEN 2 THEN -Quantite
+                    ELSE 0
+                END), 0)
+            FROM MouvementsStock
+            WHERE ArticleId=@article
+              AND NumeroSerie=@serie", conn);
+        cmd.Parameters.AddWithValue("@article", articleId);
+        cmd.Parameters.AddWithValue("@serie", numeroSerie);
+        var quantite = Convert.ToDecimal(await cmd.ExecuteScalarAsync(ct) ?? 0m);
+        return quantite > 0;
+    }
+
+    private static async Task<bool> IsStockNegatifAutoriseAsync(
+        SqlConnection conn,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(
+            "SELECT ISNULL(AutoriserStockNegatif, 0) FROM Parametres WHERE Id = 1", conn);
+        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct) ?? false);
+    }
+
+    private static async Task<decimal> GetStockDisponibleVenteAsync(
+        SqlConnection conn,
+        Guid articleId,
+        Guid depotId,
+        string? numeroLot,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(@"
+            SELECT ISNULL(SUM(QuantiteDisponible), 0)
+            FROM StockArticles
+            WHERE ArticleId=@article
+              AND DepotId=@depot
+              AND (@lot IS NULL OR NumeroLot=@lot)", conn);
+        cmd.Parameters.AddWithValue("@article", articleId);
+        cmd.Parameters.AddWithValue("@depot", depotId);
+        cmd.Parameters.AddWithValue("@lot", (object?)numeroLot ?? DBNull.Value);
+        return Convert.ToDecimal(await cmd.ExecuteScalarAsync(ct) ?? 0m);
     }
 
     private static async Task<string> NextNumeroAsync(SqlConnection conn, string type, string prefixe, CancellationToken ct)
@@ -538,6 +651,7 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
                 MontantTVA decimal(18,2) NOT NULL DEFAULT 0,
                 MontantTTC decimal(18,2) NOT NULL DEFAULT 0,
                 NumeroLot nvarchar(50) NULL,
+                NumeroSerie nvarchar(100) NULL,
                 Ordre int NOT NULL DEFAULT 0,
                 Notes nvarchar(500) NULL)",
             @"IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Reglements' AND xtype='U')
@@ -560,30 +674,65 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
             await using var cmd = new SqlCommand(script, conn);
             await cmd.ExecuteNonQueryAsync(ct);
         }
+
+        var alterations = new[]
+        {
+            @"IF COL_LENGTH('LignesDocumentVente','NumeroSerie') IS NULL
+              ALTER TABLE LignesDocumentVente ADD NumeroSerie nvarchar(100) NULL"
+        };
+
+        foreach (var script in alterations)
+        {
+            await using var cmd = new SqlCommand(script, conn);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
     }
 
     private static async Task ImpacterStockVenteAsync(SqlConnection conn, Guid documentId, Guid depotId, bool annuler, CancellationToken ct)
     {
+        var autoriserStockNegatif = await IsStockNegatifAutoriseAsync(conn, ct);
+
         await using var cmd = new SqlCommand(@"
-            SELECT ArticleId, Quantite, NumeroLot
+            SELECT ArticleId, Quantite, NumeroLot, NumeroSerie, Designation
             FROM LignesDocumentVente
             WHERE DocumentId=@id", conn);
         cmd.Parameters.AddWithValue("@id", documentId);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
-        var lignes = new List<(Guid ArticleId, decimal Quantite, string? NumeroLot)>();
+        var lignes = new List<(Guid ArticleId, decimal Quantite, string? NumeroLot, string? NumeroSerie, string Designation)>();
         while (await reader.ReadAsync(ct))
         {
             lignes.Add((
                 reader.GetGuid(0),
                 reader.GetDecimal(1),
-                reader.IsDBNull(2) ? null : reader.GetString(2)));
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? string.Empty : reader.GetString(4)));
         }
 
         await reader.CloseAsync();
 
         foreach (var ligne in lignes)
         {
+            var regles = await GetArticleStockRulesAsync(conn, ligne.ArticleId, ct);
+            if (!regles.Exists || regles.SansSuiviStock)
+                continue;
+
+            if (regles.GestionNumeroDeSerie)
+            {
+                if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                    throw new InvalidOperationException("Le numero de serie est obligatoire pour un article serialize.");
+
+                if (!annuler && !await IsNumeroSerieDisponibleAsync(conn, ligne.ArticleId, ligne.NumeroSerie!, ct))
+                    throw new InvalidOperationException($"Le numero de serie '{ligne.NumeroSerie}' n'est pas disponible pour cette vente.");
+            }
+            else if (!annuler && !autoriserStockNegatif)
+            {
+                var stockDisponible = await GetStockDisponibleVenteAsync(conn, ligne.ArticleId, depotId, ligne.NumeroLot, ct);
+                if (stockDisponible < ligne.Quantite)
+                    throw new InvalidOperationException($"Stock insuffisant pour l'article '{ligne.Designation}' : {stockDisponible:N2} disponible(s).");
+            }
+
             var quantite = annuler ? ligne.Quantite : -ligne.Quantite;
             await using var stockCmd = new SqlCommand(@"
                 IF EXISTS (SELECT 1 FROM StockArticles WHERE ArticleId=@article AND DepotId=@depot AND (@lot IS NULL OR NumeroLot=@lot))
@@ -599,6 +748,19 @@ public class VenteCommercialCommandService : ICommercialVenteCommandService
             stockCmd.Parameters.AddWithValue("@qte", quantite);
             stockCmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
             await stockCmd.ExecuteNonQueryAsync(ct);
+
+            await using var mvtCmd = new SqlCommand(@"
+                INSERT INTO MouvementsStock (Id,ArticleId,EmplacementSourceId,TypeMouvement,Quantite,
+                    PrixUnitaire,Reference,NumeroLot,NumeroSerie,CreatedAt,CreatedBy)
+                VALUES (NEWID(),@article,@depot,@type,@qte,0,@ref,@lot,@serie,GETUTCDATE(),'commercial')", conn);
+            mvtCmd.Parameters.AddWithValue("@article", ligne.ArticleId);
+            mvtCmd.Parameters.AddWithValue("@depot", depotId);
+            mvtCmd.Parameters.AddWithValue("@type", annuler ? 1 : 2);
+            mvtCmd.Parameters.AddWithValue("@qte", ligne.Quantite);
+            mvtCmd.Parameters.AddWithValue("@ref", $"VENTE-{documentId.ToString()[..8]}");
+            mvtCmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
+            mvtCmd.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
+            await mvtCmd.ExecuteNonQueryAsync(ct);
         }
     }
 

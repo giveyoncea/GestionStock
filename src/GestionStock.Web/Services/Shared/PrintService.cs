@@ -9,6 +9,7 @@ public interface IPrintService
 {
     Task PrintDocumentVenteAsync(DocumentVenteDetailDto document, ParametresDto parametres, ICurrencyService devise);
     Task PrintDocumentAchatAsync(DocumentAchatDetailDto document, ParametresDto parametres, ICurrencyService devise);
+    Task PrintDocumentStockAsync(DocumentStockPrintDto document, ParametresDto parametres, ICurrencyService devise);
     Task PrintReglementAsync(ReglementDto reglement, ParametresDto parametres, ICurrencyService devise);
     Task PrintAcompteAsync(AcompteDto acompte, ParametresDto parametres, ICurrencyService devise);
 }
@@ -84,6 +85,13 @@ public class PrintService : IPrintService
                     l.Quantite,
                     l.PrixUnitaireHT,
                     l.MontantTTC)).ToList()),
+            NormalizeDocumentPaperFormat(parametres.FormatPapierDocuments),
+            parametres.ImprimanteDocumentsDefaut);
+
+    public Task PrintDocumentStockAsync(DocumentStockPrintDto document, ParametresDto parametres, ICurrencyService devise)
+        => PrintAsync(
+            $"Document stock {document.Reference}",
+            BuildStockDocumentHtml(parametres, devise, document),
             NormalizeDocumentPaperFormat(parametres.FormatPapierDocuments),
             parametres.ImprimanteDocumentsDefaut);
 
@@ -300,6 +308,55 @@ public class PrintService : IPrintService
         {
             sb.Append($"<section class='print-notes'><h3>Observation</h3><p>{Html(notes)}</p></section>");
         }
+        sb.Append(BuildFooter(p));
+        sb.Append("</div>");
+        return sb.ToString();
+    }
+
+    private string BuildStockDocumentHtml(ParametresDto p, ICurrencyService devise, DocumentStockPrintDto document)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"<div class='print-sheet paper-{NormalizeDocumentPaperFormat(p.FormatPapierDocuments).ToLowerInvariant().Replace("_", "-")} format-{NormalizeFormat(p.FormatImpressionDocuments).ToLowerInvariant()}'>");
+        sb.Append(BuildHeader(p, document.TypeLibelle, document.Reference));
+        sb.Append("<section class='print-meta-grid'>");
+        sb.Append(BuildMetaItem("Type", document.TypeLibelle));
+        sb.Append(BuildMetaItem("Date", document.DateDocument.ToString("dd/MM/yyyy HH:mm")));
+        sb.Append(BuildMetaItem("Opérateur", document.Operateur));
+        sb.Append(BuildMetaItem("Lignes", document.NombreLignes.ToString()));
+        sb.Append(BuildMetaItem("Quantité", document.QuantiteTotale.ToString()));
+        sb.Append(BuildMetaItem("Valeur", devise.FormatAmount(document.ValeurTotale)));
+        sb.Append("</section>");
+
+        if (!string.IsNullOrWhiteSpace(document.Motif))
+        {
+            sb.Append($"<section class='print-notes'><h3>Motif</h3><p>{Html(document.Motif)}</p></section>");
+        }
+
+        sb.Append("<table class='print-table'><thead><tr>");
+        sb.Append("<th>Article</th><th>Désignation</th><th>Emplacement</th><th>Lot / Série</th><th class='text-right'>Qté</th><th class='text-right'>V.U.</th><th class='text-right'>Valeur</th>");
+        sb.Append("</tr></thead><tbody>");
+        foreach (var ligne in document.Lignes)
+        {
+            var emplacement = string.IsNullOrWhiteSpace(ligne.EmplacementDestination)
+                ? ligne.EmplacementSource
+                : $"{ligne.EmplacementSource} -> {ligne.EmplacementDestination}";
+            var lotSerie = !string.IsNullOrWhiteSpace(ligne.NumeroSerie)
+                ? $"Série: {ligne.NumeroSerie}"
+                : !string.IsNullOrWhiteSpace(ligne.NumeroLot)
+                    ? $"Lot: {ligne.NumeroLot}"
+                    : "-";
+
+            sb.Append("<tr>");
+            sb.Append($"<td>{Html(ligne.ArticleCode)}</td>");
+            sb.Append($"<td>{Html(ligne.Designation)}</td>");
+            sb.Append($"<td>{Html(emplacement)}</td>");
+            sb.Append($"<td>{Html(lotSerie)}</td>");
+            sb.Append($"<td class='text-right'>{ligne.Quantite}</td>");
+            sb.Append($"<td class='text-right'>{Html(devise.FormatAmount(ligne.ValeurUnitaire))}</td>");
+            sb.Append($"<td class='text-right'>{Html(devise.FormatAmount(ligne.ValeurTotale))}</td>");
+            sb.Append("</tr>");
+        }
+        sb.Append("</tbody></table>");
         sb.Append(BuildFooter(p));
         sb.Append("</div>");
         return sb.ToString();
