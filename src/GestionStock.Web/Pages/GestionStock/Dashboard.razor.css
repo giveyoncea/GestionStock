@@ -1,0 +1,26 @@
+.dashboard-page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+.dashboard-page .page-header,
+.dashboard-page .dashboard-hero-card,
+.dashboard-page .kpi-grid,
+.dashboard-page .dashboard-grid {
+    width: 100%;
+    max-width: none;
+}
+
+.dashboard-page .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dashboard-page .panel,
+.dashboard-page .panel-wide {
+    min-width: 0;
+}
+
+.dashboard-page .panel-wide {
+    grid-column: 1 / -1;
+}

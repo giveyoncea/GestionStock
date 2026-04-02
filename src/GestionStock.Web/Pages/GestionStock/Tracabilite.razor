@@ -39,6 +39,12 @@
             </select>
         </div>
         <div class="toolbar-right">
+            <select class="field-input ventes-page-size" @bind="pageSize" @bind:after="ChangerTaillePageTracabilite">
+                @foreach (var size in pageSizeOptions)
+                {
+                    <option value="@size">@size / page</option>
+                }
+            </select>
             <span class="record-count">@alertes.Count alerte(s)</span>
         </div>
     </div>
@@ -59,7 +65,7 @@
                         <th class="text-right">QtÃ© restante</th><th>Jours restants</th><th>Statut</th>
                     </tr></thead>
                     <tbody>
-                    @foreach (var a in alertes)
+                    @foreach (var a in AlertesPage)
                     {
                         <tr class="@(a.Critique ? "row-danger" : "row-warn")">
                             <td>
@@ -80,6 +86,14 @@
                     </tbody>
                 </table>
             </div>
+            <div class="ventes-table-footer">
+                <span class="page-info">@PaginationResumeAlertes</span>
+                <div class="pager-controls">
+                    <button class="btn-page" @onclick="PagePrecedenteAlertes" disabled="@(currentPageAlertes <= 1)">Précédent</button>
+                    <span class="pager-indicator">Page @currentPageAlertes / @TotalPagesAlertes</span>
+                    <button class="btn-page" @onclick="PageSuivanteAlertes" disabled="@(currentPageAlertes >= TotalPagesAlertes)">Suivant</button>
+                </div>
+            </div>
         }
     }
 }
@@ -91,7 +105,7 @@
         <div class="search-box">
             <span class="search-icon">ðŸ”</span>
             <input class="search-input" type="text" placeholder="Article, NÂ° lotâ€¦"
-                   @bind="rechercheLot" @bind:event="oninput" />
+                   @bind="rechercheLot" @bind:event="oninput" @bind:after="ReinitialiserPaginationLots" />
         </div>
         <div class="toolbar-filters">
             <select class="field-input" @bind="filtreStatutLot" @bind:after="ChargerLots">
@@ -104,6 +118,12 @@
             </select>
         </div>
         <div class="toolbar-right">
+            <select class="field-input ventes-page-size" @bind="pageSize" @bind:after="ChangerTaillePageTracabilite">
+                @foreach (var size in pageSizeOptions)
+                {
+                    <option value="@size">@size / page</option>
+                }
+            </select>
             <span class="record-count">@LotsFiltres.Count() lot(s)</span>
         </div>
     </div>
@@ -119,7 +139,7 @@
                     <th class="text-right">Restant</th><th>Statut</th><th></th>
                 </tr></thead>
                 <tbody>
-                @foreach (var lot in LotsFiltres)
+                @foreach (var lot in LotsPage)
                 {
                     var rowCls = lot.EstPerime ? "row-danger" : lot.EnAlertePeremption ? "row-warn" : "";
                     <tr class="@rowCls">
@@ -155,6 +175,14 @@
                 }
                 </tbody>
             </table>
+        </div>
+        <div class="ventes-table-footer">
+            <span class="page-info">@PaginationResumeLots</span>
+            <div class="pager-controls">
+                <button class="btn-page" @onclick="PagePrecedenteLots" disabled="@(currentPageLots <= 1)">Précédent</button>
+                <span class="pager-indicator">Page @currentPageLots / @TotalPagesLots</span>
+                <button class="btn-page" @onclick="PageSuivanteLots" disabled="@(currentPageLots >= TotalPagesLots)">Suivant</button>
+            </div>
         </div>
         @if (!lots.Any()) { <div class="empty-state">Aucun lot enregistrÃ©.</div> }
     }
@@ -328,10 +356,28 @@
     private bool chargement = true, chargementMvt = false, saving = false;
     private string? message;
     private string msgCls = "alert-success";
+    private int pageSize = 10;
+    private readonly int[] pageSizeOptions = [10, 20, 50, 100];
+    private int currentPageAlertes = 1;
+    private int currentPageLots = 1;
 
     // Alertes
     private List<AlertePeremptionDto> alertes = new();
     private int joursAvance = 30;
+    private IEnumerable<AlertePeremptionDto> AlertesPage => alertes
+        .Skip((currentPageAlertes - 1) * pageSize)
+        .Take(pageSize);
+    private int TotalPagesAlertes => Math.Max(1, (int)Math.Ceiling(alertes.Count / (double)pageSize));
+    private string PaginationResumeAlertes
+    {
+        get
+        {
+            if (!alertes.Any()) return "0-0 sur 0";
+            var start = (currentPageAlertes - 1) * pageSize + 1;
+            var end = Math.Min(currentPageAlertes * pageSize, alertes.Count);
+            return $"{start}-{end} sur {alertes.Count}";
+        }
+    }
 
     // Lots
     private List<LotTracabiliteDto> lots = new();
@@ -342,6 +388,21 @@
         : lots.Where(l => l.NumeroLot.Contains(rechercheLot, StringComparison.OrdinalIgnoreCase) ||
                           l.ArticleCode.Contains(rechercheLot, StringComparison.OrdinalIgnoreCase) ||
                           l.ArticleDesignation.Contains(rechercheLot, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<LotTracabiliteDto> LotsPage => LotsFiltres
+        .Skip((currentPageLots - 1) * pageSize)
+        .Take(pageSize);
+    private int TotalPagesLots => Math.Max(1, (int)Math.Ceiling(LotsFiltres.Count() / (double)pageSize));
+    private string PaginationResumeLots
+    {
+        get
+        {
+            var total = LotsFiltres.Count();
+            if (total == 0) return "0-0 sur 0";
+            var start = (currentPageLots - 1) * pageSize + 1;
+            var end = Math.Min(currentPageLots * pageSize, total);
+            return $"{start}-{end} sur {total}";
+        }
+    }
 
     // CrÃ©ation lot
     private bool showCreerLot = false;
@@ -381,6 +442,7 @@
     {
         chargement = true;
         alertes = await Api.GetAlertesPeremptionAsync(joursAvance) ?? new();
+        AssurerPaginationAlertesValide();
         chargement = false;
     }
 
@@ -388,7 +450,55 @@
     {
         chargement = true;
         lots = await Api.GetLotsAsync() ?? new();
+        AssurerPaginationLotsValide();
         chargement = false;
+    }
+
+    private void ReinitialiserPaginationLots()
+    {
+        currentPageLots = 1;
+    }
+
+    private void ChangerTaillePageTracabilite()
+    {
+        currentPageAlertes = 1;
+        currentPageLots = 1;
+    }
+
+    private void PagePrecedenteAlertes()
+    {
+        if (currentPageAlertes > 1)
+            currentPageAlertes--;
+    }
+
+    private void PageSuivanteAlertes()
+    {
+        if (currentPageAlertes < TotalPagesAlertes)
+            currentPageAlertes++;
+    }
+
+    private void PagePrecedenteLots()
+    {
+        if (currentPageLots > 1)
+            currentPageLots--;
+    }
+
+    private void PageSuivanteLots()
+    {
+        if (currentPageLots < TotalPagesLots)
+            currentPageLots++;
+    }
+
+    private void AssurerPaginationAlertesValide()
+    {
+        if (currentPageAlertes > TotalPagesAlertes)
+            currentPageAlertes = TotalPagesAlertes;
+    }
+
+    private void AssurerPaginationLotsValide()
+    {
+        if (currentPageLots > TotalPagesLots)
+            currentPageLots = TotalPagesLots;
     }
 
     private void OuvrirCreationLot()

@@ -1,0 +1,43 @@
+.achat-editor-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.achat-editor-hero {
+    margin-bottom: 0;
+}
+
+.achat-fournisseur-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.achat-fournisseur-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.achat-fournisseur-row .field-input {
+    flex: 1 1 auto;
+}
+
+.achat-fournisseur-results {
+    position: static;
+}
+
+.achats-new-lines-table {
+    font-size: 12px;
+}
+
+.achats-new-add-line {
+    margin-top: 12px;
+}
+
+@media (max-width: 860px) {
+    .achat-fournisseur-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

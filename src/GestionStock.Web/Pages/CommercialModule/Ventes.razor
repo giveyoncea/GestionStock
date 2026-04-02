@@ -8,45 +8,34 @@
 @inject IApiService Api
 @inject ICurrencyService Devise
 @inject IPrintService PrintService
-@inject IJSRuntime JS
 @inject NavigationManager Nav
-@implements IAsyncDisposable
 
 <PageTitle>Documents de vente - GestionStock</PageTitle>
 
-<div class="workspace-window-shell">
-    <section id="ventes-workspace-window" class="workspace-window @(ventesPageMinimized ? "workspace-window--minimized" : null) @(ventesPageMaximized ? "workspace-window--maximized" : null) @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window--child-open" : null)">
-        <header id="ventes-workspace-header" class="workspace-window-header workspace-window-header--draggable">
-            <div>
-                <h1 class="workspace-window-title">Documents de vente</h1>
-                <p class="workspace-window-subtitle">Consultation, validation et suivi des statuts</p>
-            </div>
-            <div class="workspace-window-controls">
-                <button type="button" class="workspace-window-btn" title="Réduire" @onclick="ToggleVentesPage">−</button>
-                <button type="button" class="workspace-window-btn" title="@(ventesPageMaximized ? "Restaurer" : "Agrandir")" @onclick="ToggleVentesPageMaximized">@(ventesPageMaximized ? "❐" : "□")</button>
-                <button type="button" class="workspace-window-btn workspace-window-btn--close" title="Fermer" @onclick="FermerVentesPage">×</button>
-            </div>
-        </header>
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Documents de vente</h1>
+        <p class="page-subtitle">Consultation, validation et suivi des statuts</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau document</button>
+    </div>
+</div>
 
-        @if (!ventesPageMinimized)
+<div class="workspace-window-toolbar">
+    <div class="ventes-type-tabs" role="tablist" aria-label="Types de documents">
+        @foreach (var option in typeOptions)
         {
-            <div class="workspace-window-toolbar">
-                <div class="ventes-type-tabs" role="tablist" aria-label="Types de documents">
-                    @foreach (var option in typeOptions)
-                    {
-                        <button type="button"
-                                class="chip-filter @(selectedTypeFilter == option.Value ? "chip-filter--active" : null)"
-                                @onclick="() => ChangerFiltreType(option.Value)">
-                            @option.Label
-                        </button>
-                    }
-                </div>
-                <div class="header-actions">
-                    <button class="btn-primary" @onclick="OuvrirCreation">+ Nouveau document</button>
-                </div>
-            </div>
+            <button type="button"
+                    class="chip-filter @(selectedTypeFilter == option.Value ? "chip-filter--active" : null)"
+                    @onclick="() => ChangerFiltreType(option.Value)">
+                @option.Label
+            </button>
+        }
+    </div>
+</div>
 
-            <div class="workspace-window-body ventes-page-body @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window-body--dimmed" : null)">
+<div class="ventes-page-body @((showDetail && detailDoc != null) || (showReglement && selectedDoc != null) ? "workspace-window-body--dimmed" : null)">
                 @if (!string.IsNullOrWhiteSpace(message))
                 {
                     <div class="@msgCls">@message</div>
@@ -158,9 +147,6 @@
                         </div>
                     </div>
                 }
-            </div>
-        }
-    </section>
 </div>
 
 @if (showForm)
@@ -444,8 +430,6 @@
     private bool showForm;
     private bool showDetail;
     private bool showReglement;
-    private bool ventesPageMinimized;
-    private bool ventesPageMaximized;
     private bool showFormMinimized;
     private bool showDetailMinimized;
     private bool showReglementMinimized;
@@ -456,8 +440,6 @@
     private DocumentVenteDto? selectedDoc;
     private DocumentVenteDetailDto? detailDoc;
     private int selectedTypeFilter;
-    private IJSObjectReference? ventesWindowModule;
-    private bool ventesWindowInitialized;
 
     private int fType = 1;
     private string fClientId = "";
@@ -499,24 +481,6 @@
         }
 
         await SynchroniserDepuisRouteAsync();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!ventesPageMaximized)
-        {
-            var module = await EnsureVentesWindowModuleAsync();
-            if (!ventesWindowInitialized)
-            {
-                await module.InvokeVoidAsync("initializeFloatingWindow", "ventes-workspace-window", "ventes-workspace-header");
-                ventesWindowInitialized = true;
-            }
-        }
-
-        if (ventesWindowModule != null)
-        {
-            await ventesWindowModule.InvokeVoidAsync("setWindowMaximized", "ventes-workspace-window", ventesPageMaximized);
-        }
     }
 
     private async Task Recharger()
@@ -610,19 +574,9 @@
             Nav.NavigateTo("/commercial/ventes");
             return;
         }
-
         FermerReglementInterne();
     }
-    private void ToggleVentesPage() => ventesPageMinimized = !ventesPageMinimized;
-    private async Task ToggleVentesPageMaximized()
-    {
-        ventesPageMaximized = !ventesPageMaximized;
-        if (ventesWindowModule != null)
-        {
-            await ventesWindowModule.InvokeVoidAsync("setWindowMaximized", "ventes-workspace-window", ventesPageMaximized);
-        }
-    }
-    private void FermerVentesPage() => Nav.NavigateTo("/commercial/dashboard");
+
     private void ToggleFormMinimized() => showFormMinimized = !showFormMinimized;
     private void ToggleDetailMinimized() => showDetailMinimized = !showDetailMinimized;
     private void ToggleReglementMinimized() => showReglementMinimized = !showReglementMinimized;
@@ -1000,26 +954,6 @@
 
         if (showForm && !editId.HasValue)
             FermerFormInterne();
-    }
-
-    private async ValueTask<IJSObjectReference> EnsureVentesWindowModuleAsync()
-    {
-        ventesWindowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/windowing.js");
-        return ventesWindowModule;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (ventesWindowModule is not null)
-        {
-            try
-            {
-                await ventesWindowModule.DisposeAsync();
-            }
-            catch
-            {
-            }
-        }
     }
 }
 

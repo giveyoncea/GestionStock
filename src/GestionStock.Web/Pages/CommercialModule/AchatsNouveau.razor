@@ -1,0 +1,395 @@
+@page "/achats/nouveau"
+@page "/commercial/achats/nouveau"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject NavigationManager Nav
+
+<PageTitle>Nouveau document d'achat - GestionStock</PageTitle>
+
+<div class="achat-editor-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Nouveau document d'achat</h1>
+            <p class="page-subtitle">Creez une commande d'achat dans une fiche dediee, plus simple a relire et a completer ligne par ligne.</p>
+        </div>
+        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux achats</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact achat-editor-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Creation</span>
+            <h2>Preparez un document d'achat clair et complet</h2>
+            <p>Selectionnez le fournisseur, renseignez la date de livraison et ajoutez vos lignes produit dans une vue dediee a la creation.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Fournisseur</span>
+            <span class="surface-pill">Lignes</span>
+            <span class="surface-pill">Prix</span>
+            <span class="surface-pill">Livraison</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <section class="editor-shell">
+            <div class="editor-card">
+                <div class="editor-section">
+                    <div class="form-section-title">Entete</div>
+                    <div class="editor-grid">
+                        <div class="field-group editor-span-2">
+                            <label class="field-label">Fournisseur *</label>
+                            <div class="achat-fournisseur-picker">
+                                <div class="achat-fournisseur-row">
+                                    <input class="field-input" placeholder="Rechercher un fournisseur..." value="@fournisseurSearch" @oninput="FiltrerFournisseursRecherche" />
+                                    <button type="button" class="btn-secondary" @onclick="OuvrirCreationFournisseurRapide">+ Fournisseur</button>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(selectedFournisseurLabel))
+                                {
+                                    <div class="tiers-selected-badge">
+                                        @selectedFournisseurLabel
+                                        <button class="tiers-clear-btn" @onclick="EffacerFournisseurSelection">x</button>
+                                    </div>
+                                }
+                                @if (filteredFournisseurs.Any())
+                                {
+                                    <div class="tiers-dropdown achat-fournisseur-results">
+                                        @foreach (var fournisseur in filteredFournisseurs.Take(8))
+                                        {
+                                            <button type="button" class="tiers-dropdown-item" @onclick="() => ChoisirFournisseur(fournisseur)">
+                                                <span class="tiers-dd-rs">@fournisseur.RaisonSociale</span>
+                                                <span class="tiers-dd-sub">@fournisseur.Code @(string.IsNullOrWhiteSpace(fournisseur.Ville) ? "" : " - " + fournisseur.Ville)</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Date livraison prevue *</label>
+                            <input class="field-input" type="date" @bind="formDateLivraison" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Commentaire</label>
+                            <input class="field-input" @bind="commentaire" placeholder="Commentaire interne optionnel" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-section">
+                    <div class="form-section-title">Lignes du document</div>
+                    <div class="table-container">
+                        <table class="data-table achats-new-lines-table">
+                            <thead>
+                                <tr>
+                                    <th>Article</th>
+                                    <th>Qte</th>
+                                    <th>Prix unitaire</th>
+                                    <th>Montant</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < formLignes.Count; i++)
+                                {
+                                    var idx = i;
+                                    <tr>
+                                        <td>
+                                            <select class="field-input" @bind="formLignes[idx].ArticleId">
+                                                <option value="@Guid.Empty">- Article -</option>
+                                                @foreach (var a in articles)
+                                                {
+                                                    <option value="@a.ArticleId">[@a.ArticleCode] @a.ArticleDesignation</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input class="field-input" type="number" min="1" @bind="formLignes[idx].Quantite" />
+                                        </td>
+                                        <td>
+                                            <input class="field-input" type="number" step="@Devise.AmountStep" @bind="formLignes[idx].PrixUnitaire" />
+                                        </td>
+                                        <td class="mono">
+                                            @Montant(formLignes[idx].Quantite * formLignes[idx].PrixUnitaire)
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn-icon btn-icon-danger" @onclick="() => SupprimerLigne(idx)">X</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="btn-secondary achats-new-add-line" @onclick="AjouterLigne">+ Ajouter une ligne</button>
+                </div>
+            </div>
+
+            <aside class="editor-side">
+                <div class="editor-side-card">
+                    <h3>Apercu</h3>
+                    <dl class="editor-preview">
+                        <div>
+                            <dt>Fournisseur</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(selectedFournisseurLabel) ? "—" : selectedFournisseurLabel)</dd>
+                        </div>
+                        <div>
+                            <dt>Livraison prevue</dt>
+                            <dd>@formDateLivraison.ToString("dd/MM/yyyy")</dd>
+                        </div>
+                        <div>
+                            <dt>Lignes</dt>
+                            <dd>@formLignes.Count(l => l.ArticleId != Guid.Empty && l.Quantite > 0)</dd>
+                        </div>
+                        <div>
+                            <dt>Total estime</dt>
+                            <dd>@Montant(formLignes.Where(l => l.ArticleId != Guid.Empty && l.Quantite > 0).Sum(l => l.Quantite * l.PrixUnitaire))</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <div class="editor-side-card">
+                    <h3>Reperes</h3>
+                    <ul class="editor-hints">
+                        <li>Ajoutez autant de lignes que necessaire avant d'enregistrer.</li>
+                        <li>Creez un fournisseur rapide si le tiers n'existe pas encore.</li>
+                        <li>Le total estime se met a jour automatiquement.</li>
+                    </ul>
+                </div>
+            </aside>
+        </section>
+
+        <div class="editor-footer">
+            <div></div>
+            <div class="editor-footer-actions">
+                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                <button class="btn btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Creer le document")</button>
+            </div>
+        </div>
+    }
+
+    @if (showQuickFournisseur)
+    {
+        <div class="modal-overlay" @onclick="FermerFournisseurRapide">
+            <div class="modal" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h2>Nouveau fournisseur</h2>
+                    <button class="btn-close" @onclick="FermerFournisseurRapide">x</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="field-group col-span-2">
+                            <label class="field-label">Raison sociale *</label>
+                            <input class="field-input" @bind="quickFournisseurNom" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Email</label>
+                            <input class="field-input" type="email" @bind="quickFournisseurEmail" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Telephone</label>
+                            <input class="field-input" @bind="quickFournisseurTel" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Ville</label>
+                            <input class="field-input" @bind="quickFournisseurVille" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Code</label>
+                            <input class="field-input" @bind="quickFournisseurCode" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" @onclick="FermerFournisseurRapide">Annuler</button>
+                    <button class="btn-primary" @onclick="CreerFournisseurRapide" disabled="@saving">Creer et selectionner</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<FournisseurDto> fournisseurs = new();
+    private List<StockResumeDto> articles = new();
+    private bool chargement = true;
+    private bool saving;
+    private bool showQuickFournisseur;
+    private string? message;
+    private string msgCls = "alert-success";
+
+    private string formFournisseurId = "";
+    private DateTime formDateLivraison = DateTime.Today.AddDays(14);
+    private string commentaire = "";
+    private List<LigneForm> formLignes = new() { new() };
+
+    private string quickFournisseurNom = "";
+    private string quickFournisseurEmail = "";
+    private string quickFournisseurTel = "";
+    private string quickFournisseurVille = "";
+    private string quickFournisseurCode = "";
+    private string fournisseurSearch = "";
+    private string selectedFournisseurLabel = "";
+    private List<FournisseurDto> filteredFournisseurs = new();
+
+    private class LigneForm
+    {
+        public Guid ArticleId { get; set; } = Guid.Empty;
+        public int Quantite { get; set; } = 1;
+        public decimal PrixUnitaire { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await ChargerDonnees();
+    }
+
+    private async Task ChargerDonnees()
+    {
+        chargement = true;
+        var f = await Api.GetFournisseursAsync(1, 200, null);
+        fournisseurs = f?.Items.ToList() ?? new();
+        var a = await Api.GetStocksResumeAsync();
+        articles = a?.ToList() ?? new();
+        chargement = false;
+    }
+
+    private void RetourListe() => Nav.NavigateTo("/commercial/achats");
+
+    private void OuvrirCreationFournisseurRapide()
+    {
+        quickFournisseurNom = string.IsNullOrWhiteSpace(fournisseurSearch) ? "" : fournisseurSearch;
+        quickFournisseurEmail = "";
+        quickFournisseurTel = "";
+        quickFournisseurVille = "";
+        quickFournisseurCode = "";
+        showQuickFournisseur = true;
+    }
+
+    private void FermerFournisseurRapide() => showQuickFournisseur = false;
+
+    private void FiltrerFournisseursRecherche(ChangeEventArgs e)
+    {
+        fournisseurSearch = e.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(fournisseurSearch))
+        {
+            filteredFournisseurs = fournisseurs.OrderBy(f => f.RaisonSociale).Take(8).ToList();
+            return;
+        }
+
+        filteredFournisseurs = fournisseurs
+            .Where(f => f.RaisonSociale.Contains(fournisseurSearch, StringComparison.OrdinalIgnoreCase)
+                     || f.Code.Contains(fournisseurSearch, StringComparison.OrdinalIgnoreCase)
+                     || f.Email.Contains(fournisseurSearch, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f.RaisonSociale)
+            .Take(8)
+            .ToList();
+    }
+
+    private void ChoisirFournisseur(FournisseurDto fournisseur)
+    {
+        formFournisseurId = fournisseur.Id.ToString();
+        fournisseurSearch = fournisseur.RaisonSociale;
+        selectedFournisseurLabel = fournisseur.RaisonSociale;
+        filteredFournisseurs = new();
+    }
+
+    private void EffacerFournisseurSelection()
+    {
+        formFournisseurId = "";
+        fournisseurSearch = "";
+        selectedFournisseurLabel = "";
+        filteredFournisseurs = new();
+    }
+
+    private void AjouterLigne() => formLignes.Add(new());
+
+    private void SupprimerLigne(int index)
+    {
+        if (index >= 0 && index < formLignes.Count)
+            formLignes.RemoveAt(index);
+
+        if (formLignes.Count == 0)
+            formLignes.Add(new());
+    }
+
+    private async Task Enregistrer()
+    {
+        if (string.IsNullOrWhiteSpace(formFournisseurId))
+        {
+            msgCls = "alert-error";
+            message = "Selectionnez un fournisseur.";
+            return;
+        }
+
+        var lignes = formLignes.Where(l => l.ArticleId != Guid.Empty && l.Quantite > 0).ToList();
+        if (!lignes.Any())
+        {
+            msgCls = "alert-error";
+            message = "Ajoutez au moins une ligne valide.";
+            return;
+        }
+
+        saving = true;
+        var dto = new CreerCommandeDto(
+            Guid.Parse(formFournisseurId),
+            formDateLivraison,
+            string.IsNullOrWhiteSpace(commentaire) ? null : commentaire,
+            lignes.Select(l => new CreerLigneDto(l.ArticleId, l.Quantite, l.PrixUnitaire)).ToList());
+
+        var result = await Api.CreerCommandeAsync(dto);
+        saving = false;
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+
+        if (result?.Succes == true)
+            Nav.NavigateTo("/commercial/achats");
+    }
+
+    private async Task CreerFournisseurRapide()
+    {
+        if (string.IsNullOrWhiteSpace(quickFournisseurNom))
+            return;
+
+        var code = string.IsNullOrWhiteSpace(quickFournisseurCode)
+            ? "F" + new string(quickFournisseurNom.Where(char.IsLetterOrDigit).Take(4).ToArray()).ToUpperInvariant().PadRight(4, 'X')
+            : quickFournisseurCode;
+
+        saving = true;
+        var result = await Api.CreerFournisseurAsync(new CreerFournisseurDto(
+            code,
+            quickFournisseurNom,
+            "",
+            quickFournisseurEmail,
+            quickFournisseurTel,
+            "",
+            quickFournisseurVille,
+            "",
+            "France",
+            7));
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            var paged = await Api.GetFournisseursAsync(1, 200, null);
+            fournisseurs = paged?.Items.ToList() ?? new();
+            var created = fournisseurs.FirstOrDefault(f => string.Equals(f.RaisonSociale, quickFournisseurNom, StringComparison.OrdinalIgnoreCase));
+            if (created != null)
+                ChoisirFournisseur(created);
+            showQuickFournisseur = false;
+        }
+    }
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}

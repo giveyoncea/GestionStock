@@ -29,11 +29,20 @@
 
 <div class="toolbar">
     <div class="search-box">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon">Rech.</span>
         <input class="search-input" type="text" placeholder="Code, designation..."
                @bind="recherche" @bind:event="oninput" @onkeyup="OnKey" />
     </div>
     <div class="toolbar-right">
+        <label class="ventes-page-size">
+            <span>Lignes par page</span>
+            <select @bind="pageSize" @bind:after="ChangerTaillePage">
+                @foreach (var option in pageSizeOptions)
+                {
+                    <option value="@option">@option</option>
+                }
+            </select>
+        </label>
         <span class="record-count">@total article(s)</span>
     </div>
 </div>
@@ -87,9 +96,9 @@ else
                                 @(art.SansSuiviStock ? "Sans suivi" : "Avec suivi")
                             </span>
                         </td>
-                        <td class="text-right mono">@(art.SansSuiviStock ? "—" : art.SeuilAlerte)</td>
-                        <td class="text-right mono">@(art.SansSuiviStock ? "—" : art.StockMinimum)</td>
-                        <td class="text-right mono text-muted">@(art.SansSuiviStock ? "—" : art.StockMaximum == 0 ? "∞" : art.StockMaximum.ToString())</td>
+                        <td class="text-right mono">@(art.SansSuiviStock ? "-" : art.SeuilAlerte)</td>
+                        <td class="text-right mono">@(art.SansSuiviStock ? "-" : art.StockMinimum)</td>
+                        <td class="text-right mono text-muted">@(art.SansSuiviStock ? "-" : art.StockMaximum == 0 ? "inf" : art.StockMaximum.ToString())</td>
                         <td class="text-right mono @GetQtyCls(art)">@GetStockDisplay(art)</td>
                         <td><span class="badge @GetStatutCls(art)">@GetStatutLib(art)</span></td>
                         <td class="actions-cell">
@@ -102,21 +111,26 @@ else
             </tbody>
         </table>
     </div>
-    <div class="pagination">
-        <button class="btn-page" disabled="@(currentPage <= 1)" @onclick="() => ChangePage(currentPage - 1)">←</button>
-        <span class="page-info">Page @currentPage / @totalPages</span>
-        <button class="btn-page" disabled="@(currentPage >= totalPages)" @onclick="() => ChangePage(currentPage + 1)">→</button>
+    <div class="ventes-table-footer">
+        <span class="page-info">@PaginationResume</span>
+        <div class="pager-controls">
+            <button class="btn-page" disabled="@(currentPage <= 1)" @onclick="() => ChangePage(currentPage - 1)">Precedent</button>
+            <span class="pager-indicator">Page @currentPage / @totalPages</span>
+            <button class="btn-page" disabled="@(currentPage >= totalPages)" @onclick="() => ChangePage(currentPage + 1)">Suivant</button>
+        </div>
     </div>
 }
 
 @code {
     private List<ArticleDto> articles = new();
     private int currentPage = 1;
+    private int pageSize = 20;
     private int totalPages = 1;
     private int total;
     private bool chargement = true;
     private string recherche = "";
     private System.Threading.Timer? _timer;
+    private readonly int[] pageSizeOptions = [10, 20, 50, 100];
 
     protected override async Task OnInitializedAsync()
     {
@@ -141,7 +155,7 @@ else
     private async Task Load()
     {
         chargement = true;
-        var r = await Api.GetArticlesAsync(currentPage, 20, recherche, null);
+        var r = await Api.GetArticlesAsync(currentPage, pageSize, recherche, null);
         articles = r?.Items.ToList() ?? new();
         total = r?.TotalCount ?? 0;
         totalPages = r?.TotalPages ?? 1;
@@ -151,6 +165,12 @@ else
     private async Task ChangePage(int p)
     {
         currentPage = p;
+        await Load();
+    }
+
+    private async Task ChangerTaillePage()
+    {
+        currentPage = 1;
         await Load();
     }
 
@@ -173,5 +193,20 @@ else
         a.SansSuiviStock ? "badge-gray" : a.EstEnRupture ? "badge-red" : a.EstEnAlerte ? "badge-amber" : "badge-green";
 
     private string GetStockDisplay(ArticleDto a)
-        => a.SansSuiviStock ? "—" : a.QuantiteTotale.ToString();
+        => a.SansSuiviStock ? "-" : a.QuantiteTotale.ToString();
+
+    private string PaginationResume
+    {
+        get
+        {
+            if (total == 0)
+            {
+                return "0 article";
+            }
+
+            var debut = ((currentPage - 1) * pageSize) + 1;
+            var fin = Math.Min(currentPage * pageSize, total);
+            return $"{debut}-{fin} sur {total}";
+        }
+    }
 }

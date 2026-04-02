@@ -41,7 +41,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var f in familles)
+                @foreach (var f in FamillesPaged)
                 {
                     <tr>
                         <td><code>@f.Code</code></td>
@@ -90,6 +90,19 @@ else
             </tbody>
         </table>
     </div>
+    @if (TotalFamilles > 0)
+    {
+        <div class="pagination">
+            <button class="btn-page" disabled="@(CurrentPageSafe <= 1)" @onclick="() => ChangePage(CurrentPageSafe - 1)">Precedent</button>
+            <span class="page-info">@PaginationResume</span>
+            <select class="field-input" style="width:90px" @bind="PageSize">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+            </select>
+            <button class="btn-page" disabled="@(CurrentPageSafe >= TotalPages)" @onclick="() => ChangePage(CurrentPageSafe + 1)">Suivant</button>
+        </div>
+    }
     @if (!familles.Any())
     {
         <div class="empty-state">Aucune famille. Creez-en une.</div>
@@ -101,6 +114,27 @@ else
     private bool chargement = true;
     private string? message;
     private string msgCls = "alert-success";
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private IEnumerable<FamilleArticleDto> FamillesPaged => familles
+        .Skip((CurrentPageSafe - 1) * PageSize)
+        .Take(PageSize);
+    private int TotalFamilles => familles.Count;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalFamilles / (double)PageSize));
+    private int CurrentPageSafe => Math.Min(currentPage, TotalPages);
+    private int PageSize
+    {
+        get => pageSize;
+        set
+        {
+            if (pageSize == value) return;
+            pageSize = value;
+            currentPage = 1;
+        }
+    }
+    private string PaginationResume => TotalFamilles == 0
+        ? "0 sur 0"
+        : $"{((CurrentPageSafe - 1) * PageSize) + 1}-{Math.Min(CurrentPageSafe * PageSize, TotalFamilles)} sur {TotalFamilles}";
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -109,6 +143,11 @@ else
         chargement = true;
         familles = await Api.GetFamillesAsync(false) ?? new();
         chargement = false;
+    }
+
+    private void ChangePage(int page)
+    {
+        currentPage = Math.Max(1, Math.Min(page, TotalPages));
     }
 
     private void CreerFamille() => Nav.NavigateTo("/familles/nouveau");

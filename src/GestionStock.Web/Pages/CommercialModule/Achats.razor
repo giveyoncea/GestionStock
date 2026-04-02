@@ -1,0 +1,563 @@
+@page "/achats"
+@page "/commercial/achats"
+@attribute [Authorize]
+@inject IApiService Api
+@inject ICurrencyService Devise
+@inject NavigationManager Nav
+
+<PageTitle>Achats - GestionStock</PageTitle>
+
+<div class="achats-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Achats</h1>
+            <p class="page-subtitle">Suivez les commandes d'achat, consultez les details et pilotez les validations depuis une liste dediee.</p>
+        </div>
+        <button class="btn-primary" @onclick='() => Nav.NavigateTo("/commercial/achats/nouveau")'>+ Nouveau document</button>
+    </div>
+
+    <section class="surface-hero surface-hero--compact achats-hero">
+        <div class="surface-hero-copy">
+            <span class="surface-hero-eyebrow">Approvisionnement</span>
+            <h2>Centralisez les achats dans une interface plus lisible</h2>
+            <p>Retrouvez les fournisseurs, les dates de livraison et les statuts de commande dans une page dediee, plus simple a parcourir au quotidien.</p>
+        </div>
+        <div class="surface-hero-pills">
+            <span class="surface-pill">Fournisseurs</span>
+            <span class="surface-pill">Livraisons</span>
+            <span class="surface-pill">Validation</span>
+            <span class="surface-pill">Comptabilisation</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="@msgCls">@message</div>
+    }
+
+    @if (chargement)
+    {
+        <div class="loading-state"><div class="spinner-lg"></div></div>
+    }
+    else
+    {
+        <div class="toolbar achats-toolbar">
+            <div></div>
+            <div class="toolbar-right">
+                <div class="achats-page-size">
+                    <label class="field-label">Lignes par page</label>
+                    <select class="field-input" @bind="pageSize" @bind:after="ChangerTaillePage">
+                        @foreach (var size in pageSizeOptions)
+                        {
+                            <option value="@size">@size</option>
+                        }
+                    </select>
+                </div>
+                <span class="record-count">@total commande(s)</span>
+            </div>
+        </div>
+
+        <div class="table-container achats-table-shell">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Fournisseur</th>
+                        <th>Date</th>
+                        <th>Livraison prevue</th>
+                        <th class="text-right">Montant TTC</th>
+                        <th>Statut</th>
+                        <th>Consultation</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in commandes)
+                    {
+                        <tr @ondblclick="() => VoirDetail(c)" style="cursor:pointer">
+                            <td><button type="button" class="btn-link-like" @onclick="() => VoirDetail(c)"><code>@c.Numero</code></button></td>
+                            <td @ondblclick="() => VoirDetail(c)">@c.FournisseurNom</td>
+                            <td @ondblclick="() => VoirDetail(c)">@c.DateCommande.ToString("dd/MM/yyyy")</td>
+                            <td @ondblclick="() => VoirDetail(c)">@c.DateLivraisonPrevue.ToString("dd/MM/yyyy")</td>
+                            <td class="text-right mono" @ondblclick="() => VoirDetail(c)">@Montant(c.MontantTTC)</td>
+                            <td @ondblclick="() => VoirDetail(c)"><span class="badge @GetStatutCls(c.Statut)">@c.StatutLibelle</span></td>
+                            <td><button type="button" class="btn-secondary" @onclick:stopPropagation="true" @onclick="() => VoirDetail(c)">Consulter</button></td>
+                            <td class="actions-cell">
+                                <details class="row-actions-menu row-actions--mobile">
+                                    <summary class="btn-row-action btn-row-action--soft">Actions</summary>
+                                    <div class="row-actions-menu-list">
+                                        @if (c.Statut == 1)
+                                        {
+                                            <button class="btn-row-action btn-row-action--primary" title="Modifier" @onclick:stopPropagation="true" @onclick="() => OuvrirEdition(c)">Modifier</button>
+                                            <button class="btn-row-action btn-row-action--success" title="Valider" @onclick:stopPropagation="true" @onclick="() => Valider(c.Id)">Valider</button>
+                                        }
+                                        @if (c.Statut == 4)
+                                        {
+                                            <button class="btn-row-action btn-row-action--warn" title="Comptabiliser" @onclick:stopPropagation="true" @onclick="() => Comptabiliser(c.Id)">Comptabiliser</button>
+                                        }
+                                        @if (c.Statut != 5 && c.Statut != 9)
+                                        {
+                                            <button class="btn-row-action btn-row-action--danger" title="Annuler" @onclick:stopPropagation="true" @onclick="() => Annuler(c.Id)">Annuler</button>
+                                        }
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="ventes-table-footer">
+            <span class="record-count">@PaginationResume</span>
+            <div class="pager-controls">
+                <button type="button" class="btn-page" @onclick="PagePrecedente" disabled="@(currentPage <= 1)">Precedent</button>
+                <span class="pager-indicator">Page @currentPage / @TotalPages</span>
+                <button type="button" class="btn-page" @onclick="PageSuivante" disabled="@(currentPage >= TotalPages)">Suivant</button>
+            </div>
+        </div>
+    }
+
+    @if (showForm)
+    {
+        <div class="modal-overlay" @onclick="FermerForm">
+            <div class="modal modal-lg" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h2>Modifier @editNumero</h2>
+                    <button class="btn-close" @onclick="FermerForm">x</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="field-group col-span-2">
+                            <label class="field-label">Fournisseur *</label>
+                            <div class="achats-fournisseur-picker">
+                                <div class="achats-fournisseur-row">
+                                    <input class="field-input" placeholder="Rechercher un fournisseur..." value="@fournisseurSearch" @oninput="FiltrerFournisseursRecherche" />
+                                    <button type="button" class="btn-secondary" @onclick="OuvrirCreationFournisseurRapide">+ Fournisseur</button>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(selectedFournisseurLabel))
+                                {
+                                    <div class="tiers-selected-badge">
+                                        @selectedFournisseurLabel
+                                        <button class="tiers-clear-btn" @onclick="EffacerFournisseurSelection">x</button>
+                                    </div>
+                                }
+                                @if (filteredFournisseurs.Any())
+                                {
+                                    <div class="tiers-dropdown achats-fournisseur-results">
+                                        @foreach (var fournisseur in filteredFournisseurs.Take(6))
+                                        {
+                                            <button type="button" class="tiers-dropdown-item" @onclick="() => ChoisirFournisseur(fournisseur)">
+                                                <span class="tiers-dd-rs">@fournisseur.RaisonSociale</span>
+                                                <span class="tiers-dd-sub">@fournisseur.Code @(string.IsNullOrWhiteSpace(fournisseur.Ville) ? "" : " - " + fournisseur.Ville)</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="field-group col-span-2">
+                            <label class="field-label">Date livraison prevue *</label>
+                            <input class="field-input" type="date" @bind="formDateLivraison" />
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table achats-lines-table">
+                            <thead>
+                                <tr>
+                                    <th>Article</th>
+                                    <th>Qte</th>
+                                    <th>Prix</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < formLignes.Count; i++)
+                                {
+                                    var idx = i;
+                                    <tr>
+                                        <td>
+                                            <select class="field-input" @bind="formLignes[idx].ArticleId">
+                                                <option value="@Guid.Empty">- Article -</option>
+                                                @foreach (var a in articles)
+                                                {
+                                                    <option value="@a.ArticleId">[@a.ArticleCode] @a.ArticleDesignation</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td><input class="field-input" type="number" min="1" @bind="formLignes[idx].Quantite" /></td>
+                                        <td><input class="field-input" type="number" step="@Devise.AmountStep" @bind="formLignes[idx].PrixUnitaire" /></td>
+                                        <td><button class="btn-icon btn-icon-danger" @onclick="() => SupprimerLigne(idx)">X</button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="btn-secondary achats-add-line" @onclick="AjouterLigne">+ Ajouter une ligne</button>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" @onclick="FermerForm">Annuler</button>
+                    <button class="btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer")</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showQuickFournisseur)
+    {
+        <div class="modal-overlay" @onclick="FermerFournisseurRapide">
+            <div class="modal" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h2>Nouveau fournisseur</h2>
+                    <button class="btn-close" @onclick="FermerFournisseurRapide">x</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="field-group col-span-2">
+                            <label class="field-label">Raison sociale *</label>
+                            <input class="field-input" @bind="quickFournisseurNom" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Email</label>
+                            <input class="field-input" type="email" @bind="quickFournisseurEmail" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Telephone</label>
+                            <input class="field-input" @bind="quickFournisseurTel" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Ville</label>
+                            <input class="field-input" @bind="quickFournisseurVille" />
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label">Code</label>
+                            <input class="field-input" @bind="quickFournisseurCode" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" @onclick="FermerFournisseurRapide">Annuler</button>
+                    <button class="btn-primary" @onclick="CreerFournisseurRapide" disabled="@saving">Creer et selectionner</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showDetail && detailDoc != null)
+    {
+        <div class="modal-overlay" @onclick="FermerDetail">
+            <div class="modal modal-lg" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h2>Consultation - @detailDoc.Numero</h2>
+                    <button class="btn-close" @onclick="FermerDetail">x</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="field-group"><label class="field-label">Fournisseur</label><div class="field-input">@detailDoc.FournisseurNom</div></div>
+                        <div class="field-group"><label class="field-label">Statut</label><div class="field-input">@detailDoc.StatutLibelle</div></div>
+                        <div class="field-group"><label class="field-label">Date</label><div class="field-input">@detailDoc.DateCommande.ToString("dd/MM/yyyy")</div></div>
+                        <div class="field-group"><label class="field-label">Livraison prevue</label><div class="field-input">@detailDoc.DateLivraisonPrevue.ToString("dd/MM/yyyy")</div></div>
+                    </div>
+                    <div class="table-container achats-detail-lines">
+                        <table class="data-table">
+                            <thead><tr><th>Article</th><th>Qte</th><th>Prix</th><th>Montant</th></tr></thead>
+                            <tbody>
+                                @foreach (var ligne in detailDoc.Lignes)
+                                {
+                                    <tr>
+                                        <td>@ligne.Designation</td>
+                                        <td class="mono">@ligne.QuantiteCommandee</td>
+                                        <td class="mono">@Montant(ligne.PrixUnitaire)</td>
+                                        <td class="mono">@Montant(ligne.MontantLigne)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="btn-secondary" @onclick="FermerDetail">Fermer</button></div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CommandeAchatDto> commandes = new();
+    private List<FournisseurDto> fournisseurs = new();
+    private List<StockResumeDto> articles = new();
+    private bool chargement = true;
+    private bool saving;
+    private string? message;
+    private string msgCls = "alert-success";
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private readonly int[] pageSizeOptions = [10, 20, 50, 100];
+    private int total;
+
+    private bool showForm;
+    private bool showDetail;
+    private bool showQuickFournisseur;
+    private Guid? editId;
+    private string editNumero = "";
+    private CommandeAchatDto? detailDoc;
+
+    private string formFournisseurId = "";
+    private DateTime formDateLivraison = DateTime.Today.AddDays(14);
+    private List<LigneForm> formLignes = new() { new() };
+    private string quickFournisseurNom = "";
+    private string quickFournisseurEmail = "";
+    private string quickFournisseurTel = "";
+    private string quickFournisseurVille = "";
+    private string quickFournisseurCode = "";
+    private string fournisseurSearch = "";
+    private string selectedFournisseurLabel = "";
+    private List<FournisseurDto> filteredFournisseurs = new();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+
+    private string PaginationResume
+    {
+        get
+        {
+            if (total == 0)
+                return "0 commande";
+
+            var start = ((currentPage - 1) * pageSize) + 1;
+            var end = Math.Min(currentPage * pageSize, total);
+            return $"{start}-{end} sur {total}";
+        }
+    }
+
+    private class LigneForm
+    {
+        public Guid ArticleId { get; set; } = Guid.Empty;
+        public int Quantite { get; set; } = 1;
+        public decimal PrixUnitaire { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Devise.EnsureLoadedAsync();
+        await Recharger();
+    }
+
+    private async Task Recharger()
+    {
+        chargement = true;
+        var r = await Api.GetCommandesAsync(currentPage, pageSize);
+        commandes = r?.Items.ToList() ?? new();
+        total = r?.TotalCount ?? commandes.Count;
+        if (currentPage > TotalPages)
+        {
+            currentPage = TotalPages;
+            r = await Api.GetCommandesAsync(currentPage, pageSize);
+            commandes = r?.Items.ToList() ?? new();
+            total = r?.TotalCount ?? commandes.Count;
+        }
+        var f = await Api.GetFournisseursAsync(1, 200, null);
+        fournisseurs = f?.Items.ToList() ?? new();
+        var a = await Api.GetStocksResumeAsync();
+        articles = a?.ToList() ?? new();
+        chargement = false;
+    }
+
+    private async Task ChangerTaillePage()
+    {
+        currentPage = 1;
+        await Recharger();
+    }
+
+    private async Task PagePrecedente()
+    {
+        if (currentPage <= 1) return;
+        currentPage--;
+        await Recharger();
+    }
+
+    private async Task PageSuivante()
+    {
+        if (currentPage >= TotalPages) return;
+        currentPage++;
+        await Recharger();
+    }
+
+    private async Task OuvrirEdition(CommandeAchatDto commande)
+    {
+        var data = await Api.GetCommandeAsync(commande.Id);
+        if (data == null) return;
+        editId = data.Id;
+        editNumero = data.Numero;
+        formFournisseurId = data.FournisseurId.ToString();
+        fournisseurSearch = data.FournisseurNom;
+        selectedFournisseurLabel = data.FournisseurNom;
+        filteredFournisseurs = new();
+        formDateLivraison = data.DateLivraisonPrevue;
+        formLignes = data.Lignes.Select(l => new LigneForm
+        {
+            ArticleId = l.ArticleId,
+            Quantite = l.QuantiteCommandee,
+            PrixUnitaire = l.PrixUnitaire
+        }).ToList();
+        showForm = true;
+    }
+
+    private void FermerForm() => showForm = false;
+    private void FermerDetail() => showDetail = false;
+
+    private void OuvrirCreationFournisseurRapide()
+    {
+        quickFournisseurNom = string.IsNullOrWhiteSpace(fournisseurSearch) ? "" : fournisseurSearch;
+        quickFournisseurEmail = "";
+        quickFournisseurTel = "";
+        quickFournisseurVille = "";
+        quickFournisseurCode = "";
+        showQuickFournisseur = true;
+    }
+
+    private void FermerFournisseurRapide() => showQuickFournisseur = false;
+
+    private void FiltrerFournisseursRecherche(ChangeEventArgs e)
+    {
+        fournisseurSearch = e.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(fournisseurSearch))
+        {
+            filteredFournisseurs = fournisseurs.OrderBy(f => f.RaisonSociale).Take(6).ToList();
+            return;
+        }
+
+        filteredFournisseurs = fournisseurs
+            .Where(f => f.RaisonSociale.Contains(fournisseurSearch, StringComparison.OrdinalIgnoreCase)
+                     || f.Code.Contains(fournisseurSearch, StringComparison.OrdinalIgnoreCase)
+                     || f.Email.Contains(fournisseurSearch, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f.RaisonSociale)
+            .Take(6)
+            .ToList();
+    }
+
+    private void ChoisirFournisseur(FournisseurDto fournisseur)
+    {
+        formFournisseurId = fournisseur.Id.ToString();
+        fournisseurSearch = fournisseur.RaisonSociale;
+        selectedFournisseurLabel = fournisseur.RaisonSociale;
+        filteredFournisseurs = new();
+    }
+
+    private void EffacerFournisseurSelection()
+    {
+        formFournisseurId = "";
+        fournisseurSearch = "";
+        selectedFournisseurLabel = "";
+        filteredFournisseurs = new();
+    }
+
+    private void AjouterLigne() => formLignes.Add(new());
+
+    private void SupprimerLigne(int index)
+    {
+        if (index >= 0 && index < formLignes.Count)
+            formLignes.RemoveAt(index);
+    }
+
+    private async Task Enregistrer()
+    {
+        if (!editId.HasValue || string.IsNullOrWhiteSpace(formFournisseurId))
+            return;
+
+        var lignes = formLignes.Where(l => l.ArticleId != Guid.Empty && l.Quantite > 0).ToList();
+        if (!lignes.Any()) return;
+        saving = true;
+        var dto = new CreerCommandeDto(
+            Guid.Parse(formFournisseurId),
+            formDateLivraison,
+            null,
+            lignes.Select(l => new CreerLigneDto(l.ArticleId, l.Quantite, l.PrixUnitaire)).ToList());
+        var result = await Api.ModifierCommandeAsync(editId.Value, dto);
+        saving = false;
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            showForm = false;
+            await Recharger();
+        }
+    }
+
+    private async Task VoirDetail(CommandeAchatDto commande)
+    {
+        detailDoc = await Api.GetCommandeAsync(commande.Id);
+        showDetail = detailDoc != null;
+    }
+
+    private async Task CreerFournisseurRapide()
+    {
+        if (string.IsNullOrWhiteSpace(quickFournisseurNom))
+            return;
+
+        var code = string.IsNullOrWhiteSpace(quickFournisseurCode)
+            ? "F" + new string(quickFournisseurNom.Where(char.IsLetterOrDigit).Take(4).ToArray()).ToUpperInvariant().PadRight(4, 'X')
+            : quickFournisseurCode;
+
+        saving = true;
+        var result = await Api.CreerFournisseurAsync(new CreerFournisseurDto(
+            code,
+            quickFournisseurNom,
+            "",
+            quickFournisseurEmail,
+            quickFournisseurTel,
+            "",
+            quickFournisseurVille,
+            "",
+            "France",
+            7));
+        saving = false;
+
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        if (result?.Succes == true)
+        {
+            var paged = await Api.GetFournisseursAsync(1, 200, null);
+            fournisseurs = paged?.Items.ToList() ?? new();
+            var created = fournisseurs.FirstOrDefault(f => string.Equals(f.RaisonSociale, quickFournisseurNom, StringComparison.OrdinalIgnoreCase));
+            if (created != null)
+                ChoisirFournisseur(created);
+            showQuickFournisseur = false;
+        }
+    }
+
+    private async Task Valider(Guid id)
+    {
+        var result = await Api.ValiderCommandeAsync(id);
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        await Recharger();
+    }
+
+    private async Task Comptabiliser(Guid id)
+    {
+        var result = await Api.ComptabiliserCommandeAsync(id);
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        await Recharger();
+    }
+
+    private async Task Annuler(Guid id)
+    {
+        var result = await Api.AnnulerCommandeAsync(id, "Annulee via interface");
+        msgCls = result?.Succes == true ? "alert-success" : "alert-error";
+        message = result?.Message;
+        await Recharger();
+    }
+
+    private string GetStatutCls(int statut) => statut switch
+    {
+        1 => "badge-gray",
+        2 => "badge-blue",
+        3 => "badge-amber",
+        4 => "badge-green",
+        5 => "badge-teal",
+        9 => "badge-red",
+        _ => "badge-gray"
+    };
+
+    private string Montant(decimal value) => Devise.FormatAmount(value);
+}

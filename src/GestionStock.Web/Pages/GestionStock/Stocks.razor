@@ -46,9 +46,18 @@
         <div class="toolbar">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input class="search-input" type="text" placeholder="Numero, reference, article, motif..." @bind="recherche" @bind:event="oninput" />
+                <input class="search-input" type="text" placeholder="Numero, reference, article, motif..." @bind="recherche" @bind:event="oninput" @bind:after="ReinitialiserPagination" />
             </div>
             <div class="toolbar-right">
+                <div class="ventes-page-size">
+                    <label class="field-label">Lignes par page</label>
+                    <select class="field-input" @bind="pageSize" @bind:after="ChangerTaillePage">
+                        @foreach (var size in pageSizeOptions)
+                        {
+                            <option value="@size">@size</option>
+                        }
+                    </select>
+                </div>
                 <span class="record-count">@DocumentsFiltres.Count() document(s)</span>
             </div>
         </div>
@@ -80,7 +89,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var doc in DocumentsFiltres)
+                    @foreach (var doc in DocumentsPage)
                     {
                         <tr class="stocks-documents-row">
                             <td>
@@ -103,6 +112,14 @@
                 </tbody>
             </table>
         </div>
+        <div class="ventes-table-footer">
+            <span class="record-count">@PaginationResume</span>
+            <div class="pager-controls">
+                <button type="button" class="btn-page" @onclick="PagePrecedente" disabled="@(currentPage <= 1)">Précédent</button>
+                <span class="pager-indicator">Page @currentPage / @TotalPages</span>
+                <button type="button" class="btn-page" @onclick="PageSuivante" disabled="@(currentPage >= TotalPages)">Suivant</button>
+            </div>
+        </div>
     }
 </div>
 
@@ -121,6 +138,9 @@
     private string recherche = string.Empty;
     private bool chargement = true;
     private int selectedTypeFilter;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private readonly int[] pageSizeOptions = [10, 20, 50, 100];
 
     private IEnumerable<DocumentStockDto> DocumentsFiltres =>
         documents.Where(d =>
@@ -140,6 +160,28 @@
         .OrderByDescending(d => d.DateDocument)
         .ThenByDescending(d => d.Numero);
 
+    private List<DocumentStockDto> DocumentsPage =>
+        DocumentsFiltres
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(DocumentsFiltres.Count() / (double)pageSize));
+
+    private string PaginationResume
+    {
+        get
+        {
+            var total = DocumentsFiltres.Count();
+            if (total == 0)
+                return "0 document";
+
+            var start = ((currentPage - 1) * pageSize) + 1;
+            var end = Math.Min(currentPage * pageSize, total);
+            return $"{start}-{end} sur {total}";
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await Devise.EnsureLoadedAsync();
@@ -156,10 +198,15 @@
 
         documents = (await documentsTask)?.ToList() ?? new();
         parametres = await parametresTask;
+        AssurerPaginationValide();
         chargement = false;
     }
 
-    private void ChangerType(int type) => selectedTypeFilter = type;
+    private void ChangerType(int type)
+    {
+        selectedTypeFilter = type;
+        ReinitialiserPagination();
+    }
 
     private async Task ImprimerDocument(DocumentStockDto doc)
     {
@@ -214,6 +261,33 @@
     private void AllerSortie() => Nav.NavigateTo("/stocks/sortie");
     private void AllerTransfert() => Nav.NavigateTo("/stocks/transfert");
     private void AllerInventaire() => Nav.NavigateTo("/stocks/inventaire");
+    private void ReinitialiserPagination()
+    {
+        currentPage = 1;
+        AssurerPaginationValide();
+    }
+
+    private void ChangerTaillePage() => ReinitialiserPagination();
+
+    private void PagePrecedente()
+    {
+        if (currentPage > 1)
+            currentPage--;
+    }
+
+    private void PageSuivante()
+    {
+        if (currentPage < TotalPages)
+            currentPage++;
+    }
+
+    private void AssurerPaginationValide()
+    {
+        if (currentPage > TotalPages)
+            currentPage = TotalPages;
+        if (currentPage < 1)
+            currentPage = 1;
+    }
 
     private string Montant(decimal value) => Devise.FormatAmount(value);
 

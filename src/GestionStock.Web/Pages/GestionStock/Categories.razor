@@ -36,7 +36,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var cat in categories)
+                @foreach (var cat in CategoriesPaged)
                 {
                     <tr>
                         <td><code>@cat.Code</code></td>
@@ -72,6 +72,19 @@ else
             </tbody>
         </table>
     </div>
+    @if (TotalCategories > 0)
+    {
+        <div class="pagination">
+            <button class="btn-page" disabled="@(CurrentPageSafe <= 1)" @onclick="() => ChangePage(CurrentPageSafe - 1)">Precedent</button>
+            <span class="page-info">@PaginationResume</span>
+            <select class="field-input" style="width:90px" @bind="PageSize">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+            </select>
+            <button class="btn-page" disabled="@(CurrentPageSafe >= TotalPages)" @onclick="() => ChangePage(CurrentPageSafe + 1)">Suivant</button>
+        </div>
+    }
     @if (!categories.Any())
     {
         <div class="empty-state">Aucune catégorie. Créez-en une pour commencer.</div>
@@ -132,6 +145,27 @@ else
     private bool chargement = true, showModal = false, saving = false;
     private string? message;
     private string msgCls = "alert-success";
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private IEnumerable<CategorieDto> CategoriesPaged => categories
+        .Skip((CurrentPageSafe - 1) * PageSize)
+        .Take(PageSize);
+    private int TotalCategories => categories.Count;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCategories / (double)PageSize));
+    private int CurrentPageSafe => Math.Min(currentPage, TotalPages);
+    private int PageSize
+    {
+        get => pageSize;
+        set
+        {
+            if (pageSize == value) return;
+            pageSize = value;
+            currentPage = 1;
+        }
+    }
+    private string PaginationResume => TotalCategories == 0
+        ? "0 sur 0"
+        : $"{((CurrentPageSafe - 1) * PageSize) + 1}-{Math.Min(CurrentPageSafe * PageSize, TotalCategories)} sur {TotalCategories}";
 
     private Guid? editId;
     private string fCode = "", fLibelle = "", fDescription = "", fCouleur = "";
@@ -145,6 +179,11 @@ else
         var r = await Api.GetCategoriesAsync(false);
         categories = r ?? new();
         chargement = false;
+    }
+
+    private void ChangePage(int page)
+    {
+        currentPage = Math.Max(1, Math.Min(page, TotalPages));
     }
 
     private void OuvrirCreation()

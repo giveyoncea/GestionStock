@@ -1,0 +1,70 @@
+.achats-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.achats-hero {
+    margin-bottom: 0;
+}
+
+.achats-toolbar {
+    margin-bottom: 0.25rem;
+}
+
+.achats-page-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.achats-page-size .field-label {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.achats-page-size .field-input {
+    min-width: 96px;
+}
+
+.achats-table-shell {
+    overflow: auto;
+}
+
+.achats-fournisseur-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.achats-fournisseur-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.achats-fournisseur-row .field-input {
+    flex: 1 1 auto;
+}
+
+.achats-fournisseur-results {
+    position: static;
+}
+
+.achats-lines-table {
+    font-size: 12px;
+}
+
+.achats-add-line {
+    margin-top: 12px;
+}
+
+.achats-detail-lines {
+    margin-top: 16px;
+}
+
+@media (max-width: 860px) {
+    .achats-fournisseur-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

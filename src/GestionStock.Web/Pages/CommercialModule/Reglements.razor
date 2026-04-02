@@ -64,13 +64,27 @@
             </select>
         </div>
         <div class="toolbar-right">
+            <select class="field-input ventes-page-size" @bind="pageSize" @bind:after="ChangerTaillePageReglements">
+                @foreach (var size in pageSizeOptions)
+                {
+                    <option value="@size">@size / page</option>
+                }
+            </select>
             <span class="record-count">@reglClients.Count encaissement(s)</span>
             <span class="record-count" style="font-weight:700;color:var(--col-green)">
                 Total : @reglClients.Sum(r => r.Montant).ToString("N2") F
             </span>
         </div>
     </div>
-    @RenderTableReglements(reglClients, chargementRC)
+    @RenderTableReglements(ReglClientsPage, chargementRC)
+    <div class="ventes-table-footer">
+        <span class="page-info">@PaginationResumeReglClients</span>
+        <div class="pager-controls">
+            <button class="btn-page" @onclick="PagePrecedenteReglClients" disabled="@(currentPageReglClients <= 1)">Précédent</button>
+            <span class="pager-indicator">Page @currentPageReglClients / @TotalPagesReglClients</span>
+            <button class="btn-page" @onclick="PageSuivanteReglClients" disabled="@(currentPageReglClients >= TotalPagesReglClients)">Suivant</button>
+        </div>
+    </div>
 }
 
 @* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -86,13 +100,27 @@
             </select>
         </div>
         <div class="toolbar-right">
+            <select class="field-input ventes-page-size" @bind="pageSize" @bind:after="ChangerTaillePageReglements">
+                @foreach (var size in pageSizeOptions)
+                {
+                    <option value="@size">@size / page</option>
+                }
+            </select>
             <span class="record-count">@reglFourn.Count décaissement(s)</span>
             <span class="record-count" style="font-weight:700;color:var(--col-red)">
                 Total : @reglFourn.Sum(r => r.Montant).ToString("N2") F
             </span>
         </div>
     </div>
-    @RenderTableReglements(reglFourn, chargementRF)
+    @RenderTableReglements(ReglFournPage, chargementRF)
+    <div class="ventes-table-footer">
+        <span class="page-info">@PaginationResumeReglFourn</span>
+        <div class="pager-controls">
+            <button class="btn-page" @onclick="PagePrecedenteReglFourn" disabled="@(currentPageReglFourn <= 1)">Précédent</button>
+            <span class="pager-indicator">Page @currentPageReglFourn / @TotalPagesReglFourn</span>
+            <button class="btn-page" @onclick="PageSuivanteReglFourn" disabled="@(currentPageReglFourn >= TotalPagesReglFourn)">Suivant</button>
+        </div>
+    </div>
 }
 
 @* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -108,13 +136,27 @@
             </label>
         </div>
         <div class="toolbar-right">
+            <select class="field-input ventes-page-size" @bind="pageSize" @bind:after="ChangerTaillePageReglements">
+                @foreach (var size in pageSizeOptions)
+                {
+                    <option value="@size">@size / page</option>
+                }
+            </select>
             <span class="record-count">@acomptesClients.Count acompte(s)</span>
             <span class="record-count" style="color:var(--col-amber)">
                 Disponible : @acomptesClients.Where(a => !a.EstUtilise).Sum(a => a.MontantDisponible).ToString("N2") F
             </span>
         </div>
     </div>
-    @RenderTableAcomptes(acomptesClients, chargementAC, true)
+    @RenderTableAcomptes(AcomptesClientsPage, chargementAC, true)
+    <div class="ventes-table-footer">
+        <span class="page-info">@PaginationResumeAcomptesClients</span>
+        <div class="pager-controls">
+            <button class="btn-page" @onclick="PagePrecedenteAcomptesClients" disabled="@(currentPageAcomptesClients <= 1)">Précédent</button>
+            <span class="pager-indicator">Page @currentPageAcomptesClients / @TotalPagesAcomptesClients</span>
+            <button class="btn-page" @onclick="PageSuivanteAcomptesClients" disabled="@(currentPageAcomptesClients >= TotalPagesAcomptesClients)">Suivant</button>
+        </div>
+    </div>
 }
 
 @* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -130,13 +172,27 @@
             </label>
         </div>
         <div class="toolbar-right">
+            <select class="field-input ventes-page-size" @bind="pageSize" @bind:after="ChangerTaillePageReglements">
+                @foreach (var size in pageSizeOptions)
+                {
+                    <option value="@size">@size / page</option>
+                }
+            </select>
             <span class="record-count">@acomptesFourn.Count acompte(s)</span>
             <span class="record-count" style="color:var(--col-amber)">
                 Disponible : @acomptesFourn.Where(a => !a.EstUtilise).Sum(a => a.MontantDisponible).ToString("N2") F
             </span>
         </div>
     </div>
-    @RenderTableAcomptes(acomptesFourn, chargementAF, false)
+    @RenderTableAcomptes(AcomptesFournPage, chargementAF, false)
+    <div class="ventes-table-footer">
+        <span class="page-info">@PaginationResumeAcomptesFourn</span>
+        <div class="pager-controls">
+            <button class="btn-page" @onclick="PagePrecedenteAcomptesFourn" disabled="@(currentPageAcomptesFourn <= 1)">Précédent</button>
+            <span class="pager-indicator">Page @currentPageAcomptesFourn / @TotalPagesAcomptesFourn</span>
+            <button class="btn-page" @onclick="PageSuivanteAcomptesFourn" disabled="@(currentPageAcomptesFourn >= TotalPagesAcomptesFourn)">Suivant</button>
+        </div>
+    </div>
 }
 
 @* â”€â”€â”€ Render helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
@@ -370,6 +426,24 @@
     private List<AcompteDto> acomptesFourn = new();
     private List<ClientDto> clients = new();
     private List<FournisseurDto> fournisseurs = new();
+    private int pageSize = 10;
+    private readonly int[] pageSizeOptions = [10, 20, 50, 100];
+    private int currentPageReglClients = 1;
+    private int currentPageReglFourn = 1;
+    private int currentPageAcomptesClients = 1;
+    private int currentPageAcomptesFourn = 1;
+    private IEnumerable<ReglementDto> ReglClientsPage => reglClients.Skip((currentPageReglClients - 1) * pageSize).Take(pageSize);
+    private IEnumerable<ReglementDto> ReglFournPage => reglFourn.Skip((currentPageReglFourn - 1) * pageSize).Take(pageSize);
+    private IEnumerable<AcompteDto> AcomptesClientsPage => acomptesClients.Skip((currentPageAcomptesClients - 1) * pageSize).Take(pageSize);
+    private IEnumerable<AcompteDto> AcomptesFournPage => acomptesFourn.Skip((currentPageAcomptesFourn - 1) * pageSize).Take(pageSize);
+    private int TotalPagesReglClients => Math.Max(1, (int)Math.Ceiling(reglClients.Count / (double)pageSize));
+    private int TotalPagesReglFourn => Math.Max(1, (int)Math.Ceiling(reglFourn.Count / (double)pageSize));
+    private int TotalPagesAcomptesClients => Math.Max(1, (int)Math.Ceiling(acomptesClients.Count / (double)pageSize));
+    private int TotalPagesAcomptesFourn => Math.Max(1, (int)Math.Ceiling(acomptesFourn.Count / (double)pageSize));
+    private string PaginationResumeReglClients => ConstruireResumePagination(currentPageReglClients, reglClients.Count);
+    private string PaginationResumeReglFourn => ConstruireResumePagination(currentPageReglFourn, reglFourn.Count);
+    private string PaginationResumeAcomptesClients => ConstruireResumePagination(currentPageAcomptesClients, acomptesClients.Count);
+    private string PaginationResumeAcomptesFourn => ConstruireResumePagination(currentPageAcomptesFourn, acomptesFourn.Count);
 
     // â”€â”€ Chargement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private bool chargementRC=true, chargementRF=false, chargementAC=false, chargementAF=false, chargementDocs=false;
@@ -482,12 +556,89 @@
         }
     }
 
+    private void ChangerTaillePageReglements()
+    {
+        currentPageReglClients = 1;
+        currentPageReglFourn = 1;
+        currentPageAcomptesClients = 1;
+        currentPageAcomptesFourn = 1;
+    }
+
+    private void PagePrecedenteReglClients()
+    {
+        if (currentPageReglClients > 1)
+            currentPageReglClients--;
+    }
+
+    private void PageSuivanteReglClients()
+    {
+        if (currentPageReglClients < TotalPagesReglClients)
+            currentPageReglClients++;
+    }
+
+    private void PagePrecedenteReglFourn()
+    {
+        if (currentPageReglFourn > 1)
+            currentPageReglFourn--;
+    }
+
+    private void PageSuivanteReglFourn()
+    {
+        if (currentPageReglFourn < TotalPagesReglFourn)
+            currentPageReglFourn++;
+    }
+
+    private void PagePrecedenteAcomptesClients()
+    {
+        if (currentPageAcomptesClients > 1)
+            currentPageAcomptesClients--;
+    }
+
+    private void PageSuivanteAcomptesClients()
+    {
+        if (currentPageAcomptesClients < TotalPagesAcomptesClients)
+            currentPageAcomptesClients++;
+    }
+
+    private void PagePrecedenteAcomptesFourn()
+    {
+        if (currentPageAcomptesFourn > 1)
+            currentPageAcomptesFourn--;
+    }
+
+    private void PageSuivanteAcomptesFourn()
+    {
+        if (currentPageAcomptesFourn < TotalPagesAcomptesFourn)
+            currentPageAcomptesFourn++;
+    }
+
+    private void AssurerPaginationValide()
+    {
+        if (currentPageReglClients > TotalPagesReglClients)
+            currentPageReglClients = TotalPagesReglClients;
+        if (currentPageReglFourn > TotalPagesReglFourn)
+            currentPageReglFourn = TotalPagesReglFourn;
+        if (currentPageAcomptesClients > TotalPagesAcomptesClients)
+            currentPageAcomptesClients = TotalPagesAcomptesClients;
+        if (currentPageAcomptesFourn > TotalPagesAcomptesFourn)
+            currentPageAcomptesFourn = TotalPagesAcomptesFourn;
+    }
+
+    private string ConstruireResumePagination(int page, int total)
+    {
+        if (total == 0) return "0-0 sur 0";
+        var start = (page - 1) * pageSize + 1;
+        var end = Math.Min(page * pageSize, total);
+        return $"{start}-{end} sur {total}";
+    }
+
     // â”€â”€ Chargement donnÃ©es â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private async Task ChargerReglClients()
     {
         chargementRC = true;
         var all = await Api.GetReglementsAsync(typeDocument: 1) ?? new();
         reglClients = filtreMode == 0 ? all : all.Where(r => r.ModeReglement == filtreMode).ToList();
+        AssurerPaginationValide();
         chargementRC = false;
     }
     private async Task ChargerReglFourn()
@@ -495,6 +646,7 @@
         chargementRF = true;
         var all = await Api.GetReglementsAsync(typeDocument: 2) ?? new();
         reglFourn = filtreModeFourn == 0 ? all : all.Where(r => r.ModeReglement == filtreModeFourn).ToList();
+        AssurerPaginationValide();
         chargementRF = false;
     }
     private async Task ChargerAcomptesClients()
@@ -502,6 +654,7 @@
         chargementAC = true;
         var all = await Api.GetAcomptesAsync() ?? new();
         acomptesClients = all.Where(a => a.ClientId != null && (!nonUtilisesC || !a.EstUtilise)).ToList();
+        AssurerPaginationValide();
         chargementAC = false;
     }
     private async Task ChargerAcomptesFourn()
@@ -509,6 +662,7 @@
         chargementAF = true;
         var all = await Api.GetAcomptesAsync() ?? new();
         acomptesFourn = all.Where(a => a.FournisseurId != null && (!nonUtilisesF || !a.EstUtilise)).ToList();
+        AssurerPaginationValide();
         chargementAF = false;
     }
 
@@ -649,7 +803,7 @@
     }
 
     // â”€â”€ Render acomptes table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    private RenderFragment RenderTableAcomptes(List<AcompteDto> list, bool loading, bool isClient) => __builder =>
+    private RenderFragment RenderTableAcomptes(IEnumerable<AcompteDto> list, bool loading, bool isClient) => __builder =>
     {
         if (loading)
         {
@@ -697,7 +851,7 @@
         __builder.CloseElement(); __builder.CloseElement(); __builder.CloseElement();
     };
 
-    private RenderFragment RenderTableReglements(List<ReglementDto> list, bool loading) => __builder =>
+    private RenderFragment RenderTableReglements(IEnumerable<ReglementDto> list, bool loading) => __builder =>
     {
         if (loading)
         {
