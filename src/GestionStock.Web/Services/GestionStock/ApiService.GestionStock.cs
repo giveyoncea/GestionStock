@@ -71,6 +71,12 @@ public partial class ApiService
     public Task<ResultDto?> CreerDocumentEntreeStockAsync(DocumentEntreeStockRequest dto)
         => PostAsync("api/stocks/documents/entree", dto);
 
+    public Task<ResultDto?> CreerDocumentSortieStockAsync(DocumentSortieStockRequest dto)
+        => PostAsync("api/stocks/documents/sortie", dto);
+
+    public Task<ResultDto?> CreerDocumentTransfertStockAsync(DocumentTransfertStockRequest dto)
+        => PostAsync("api/stocks/documents/transfert", dto);
+
     public Task<ResultDto?> EntreeStockAsync(EntreeStockDto dto)
         => PostAsync("api/stocks/entree", dto);
 

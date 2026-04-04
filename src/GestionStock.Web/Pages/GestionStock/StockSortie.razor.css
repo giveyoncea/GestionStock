@@ -1,11 +1,127 @@
-.stock-operation-page .stock-operation-hero {
-  margin-bottom: 20px;
+.stock-exit-page {
+    position: fixed;
+    inset: 0;
+    z-index: 220;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
 }
 
-.stock-operation-page .editor-shell {
-  align-items: start;
+.stock-exit-page__overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(21, 18, 14, 0.18);
+    backdrop-filter: blur(2px);
 }
 
-.stock-operation-page .editor-side {
-  max-width: 320px;
+.stock-exit-window {
+    position: relative;
+    width: min(1280px, calc(100vw - 72px));
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(214, 208, 194, .95);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, .99);
+    box-shadow: 0 30px 70px rgba(15, 23, 42, .18);
+    overflow: hidden;
+}
+
+.stock-exit-window--maximized {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 16px);
+}
+
+.stock-exit-window--minimized {
+    width: min(920px, calc(100vw - 96px));
+}
+
+.stock-exit-window__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--col-border);
+    background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(249,246,240,.95));
+}
+
+.stock-exit-window__heading {
+    display: grid;
+    gap: 6px;
+}
+
+.stock-exit-window__breadcrumb {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #8a6a35;
+}
+
+.stock-exit-window__title {
+    margin: 0;
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: 700;
+    color: #1b1712;
+}
+
+.stock-exit-window__subtitle {
+    margin: 0;
+    color: #6f6351;
+    font-size: 14px;
+}
+
+.stock-exit-window__controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.stock-exit-window__body {
+    padding: 22px 24px 24px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.stock-operation-hero {
+    margin-bottom: 20px;
+}
+
+.stock-exit-page .editor-shell {
+    align-items: start;
+}
+
+.stock-exit-page .editor-side {
+    max-width: 320px;
+}
+
+@media (max-width: 980px) {
+    .stock-exit-page {
+        padding: 12px;
+        align-items: flex-end;
+    }
+
+    .stock-exit-window,
+    .stock-exit-window--maximized,
+    .stock-exit-window--minimized {
+        width: 100%;
+        max-height: 94dvh;
+        border-radius: 18px 18px 0 0;
+    }
+
+    .stock-exit-window__header,
+    .stock-exit-window__body {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .stock-exit-window__header {
+        flex-direction: column;
+    }
 }

@@ -3,133 +3,286 @@
 @inject IApiService Api
 @inject NavigationManager Nav
 @inject ICurrencyService Devise
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Sortie de stock - GestionStock</PageTitle>
 
-<div class="stock-operation-page">
-    <div class="page-header">
-        <div>
-            <h1 class="page-title">Sortie de stock</h1>
-            <p class="page-subtitle">Enregistrez une sortie en conservant une trace claire du motif et de la reference.</p>
-        </div>
-        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux stocks</button>
-    </div>
+<HeadContent>
+    <link rel="stylesheet" href="/css/stock-sortie-window.css?v=20260403b" />
+</HeadContent>
 
-    <section class="surface-hero surface-hero--compact stock-operation-hero">
-        <div class="surface-hero-copy">
-            <span class="surface-hero-eyebrow">Flux sortant</span>
-            <h2>Diminuez un stock dans une fiche simple et securisee.</h2>
-            <p>Choisissez l'article, l'emplacement et la quantite pour enregistrer une consommation, une livraison ou une correction.</p>
-        </div>
-        <div class="surface-hero-pills">
-            <span class="surface-pill">Quantite</span>
-            <span class="surface-pill">Reference</span>
-            <span class="surface-pill">Motif</span>
-        </div>
-    </section>
+<div class="stock-exit-page">
+    <div class="stock-exit-page__overlay"></div>
 
-    @if (!string.IsNullOrWhiteSpace(message))
-    {
-        <div class="@msgCls">@message</div>
-    }
+    <section id="stock-exit-window"
+             class="stock-exit-window @(isMaximized ? "stock-exit-window--maximized workspace-window--maximized" : null) @(isMinimized ? "stock-exit-window--minimized" : null)">
+        <header id="stock-exit-header"
+                class="stock-exit-window__header @(isMaximized ? null : "stock-exit-window__header--draggable")">
+            <div class="stock-exit-window__heading">
+                <div class="stock-exit-window__breadcrumb">Stocks / Nouveau document / Sortie</div>
+                <h1 class="stock-exit-window__title">Document de sortie de stock</h1>
+                <p class="stock-exit-window__subtitle">Creez une vraie fiche de sortie avec une entete et plusieurs lignes de document.</p>
+            </div>
 
-    @if (chargement)
-    {
-        <div class="loading-state"><div class="spinner-lg"></div></div>
-    }
-    else
-    {
-        <section class="editor-shell">
-            <div class="editor-card">
-                <div class="editor-section">
-                    <div class="form-section-title">Saisie</div>
-                    <div class="editor-grid">
-                        <div class="field-group editor-span-2">
-                            <label class="field-label">Article *</label>
-                            <select class="field-input" @bind="selectedArticleId" @bind:after="OnArticleChanged">
-                                <option value="@Guid.Empty">Selectionner</option>
-                                @foreach (var s in stocks)
-                                {
-                                    <option value="@s.ArticleId">[@s.ArticleCode] @s.ArticleDesignation</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="field-group editor-span-2">
-                            <label class="field-label">Emplacement *</label>
-                            <select class="field-input" @bind="selectedEmplacementId">
-                                <option value="@Guid.Empty">Selectionner</option>
-                                @foreach (var e in emplacements)
-                                {
-                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="field-group">
-                            <label class="field-label">Quantite *</label>
-                            <input class="field-input" type="number" min="1" @bind="quantite" disabled="@ArticleSerialise" />
-                        </div>
-                        <div class="field-group editor-span-2">
-                            <label class="field-label">Reference *</label>
-                            <input class="field-input" @bind="reference" placeholder="SO-2026-001" />
-                        </div>
-                        <div class="field-group">
-                            <label class="field-label">No lot</label>
-                            <input class="field-input" @bind="numeroLot" />
-                        </div>
-                        @if (ArticleSerialise)
-                        {
-                            <div class="field-group">
-                                <label class="field-label">Numero de serie *</label>
-                                <input class="field-input" @bind="numeroSerie" placeholder="SN-000001" />
+            <div class="stock-exit-window__controls">
+                <button type="button"
+                        class="stock-window-btn"
+                        title="Reduire"
+                        aria-label="Reduire"
+                        @onclick="BasculerReduction">
+                    Reduire
+                </button>
+                <button type="button"
+                        class="stock-window-btn"
+                        title="@(isMaximized ? "Restaurer" : "Agrandir")"
+                        aria-label="@(isMaximized ? "Restaurer" : "Agrandir")"
+                        @onclick="BasculerAgrandissement">
+                    @(isMaximized ? "Restaurer" : "Agrandir")
+                </button>
+                <button type="button"
+                        class="stock-window-btn stock-window-btn--danger"
+                        title="Fermer"
+                        aria-label="Fermer"
+                        @onclick="Fermer">
+                    Fermer
+                </button>
+            </div>
+        </header>
+
+        <div class="stock-exit-window__body" style="display:@(isMinimized ? "none" : "block");">
+            <section class="surface-hero surface-hero--compact stock-operation-hero">
+                <div class="surface-hero-copy">
+                    <span class="surface-hero-eyebrow">Document de sortie</span>
+                    <h2>Regroupez plusieurs sorties dans une seule fiche pour mieux tracer les consommations.</h2>
+                    <p>La reference, la date et le motif appartiennent au document. Chaque ligne precise ensuite l'article, l'emplacement et la valorisation sortante.</p>
+                </div>
+                <div class="surface-hero-pills">
+                    <span class="surface-pill">Entete</span>
+                    <span class="surface-pill">Lignes</span>
+                    <span class="surface-pill">Lots</span>
+                    <span class="surface-pill">Series</span>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="@msgCls">@message</div>
+            }
+
+            @if (chargement)
+            {
+                <div class="loading-state"><div class="spinner-lg"></div></div>
+            }
+            else
+            {
+                <section class="editor-shell stock-document-exit-shell">
+                    <div class="editor-card stock-document-exit-card">
+                        <div class="editor-section">
+                            <div class="form-section-title">Entete du document</div>
+                            <div class="editor-grid">
+                                <div class="field-group">
+                                    <label class="field-label">Date du document *</label>
+                                    <input class="field-input" type="date" @bind="dateDocument" />
+                                </div>
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Reference *</label>
+                                    <input class="field-input" @bind="reference" placeholder="SOR-2026-0001" />
+                                </div>
+                                <div class="field-group editor-span-3">
+                                    <label class="field-label">Motif general</label>
+                                    <input class="field-input" @bind="motifDocument" placeholder="Livraison, consommation interne, casse, rebut..." />
+                                </div>
                             </div>
-                        }
-                        <div class="field-group editor-span-2">
-                            <label class="field-label">Motif</label>
-                            <input class="field-input" @bind="motif" placeholder="Livraison, consommation, casse..." />
+                        </div>
+
+                        <div class="editor-section">
+                            <div class="stock-document-exit-title-row">
+                                <div>
+                                    <div class="form-section-title">Ajouter une ligne</div>
+                                    <p class="stock-document-exit-help">Chaque ligne destocke l'article choisi depuis son emplacement et sera reprise dans le document final.</p>
+                                </div>
+                            </div>
+
+                            <div class="editor-grid stock-document-exit-grid">
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Article *</label>
+                                    <select class="field-input" @bind="draft.ArticleId" @bind:after="OnDraftArticleChanged">
+                                        <option value="@Guid.Empty">Selectionner</option>
+                                        @foreach (var article in articles)
+                                        {
+                                            <option value="@article.Id">[@article.Code] @article.Designation</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Emplacement *</label>
+                                    <select class="field-input" @bind="draft.EmplacementId">
+                                        <option value="@Guid.Empty">Selectionner</option>
+                                        @foreach (var e in emplacements)
+                                        {
+                                            <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Quantite *</label>
+                                    <input class="field-input" type="number" min="1" @bind="draft.Quantite" disabled="@DraftArticleSerialise" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">@($"Prix unitaire ({Devise.Symbol})")</label>
+                                    <input class="field-input" type="number" step="@Devise.AmountStep" min="0" @bind="draft.PrixUnitaire" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">No lot</label>
+                                    <input class="field-input" @bind="draft.NumeroLot" />
+                                </div>
+                                @if (DraftArticleSerialise)
+                                {
+                                    <div class="field-group">
+                                        <label class="field-label">No serie *</label>
+                                        <input class="field-input" @bind="draft.NumeroSerie" placeholder="SN-000001" />
+                                    </div>
+                                }
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Motif de ligne</label>
+                                    <input class="field-input" @bind="draft.Motif" placeholder="Optionnel si le motif general suffit" />
+                                </div>
+                            </div>
+
+                            <div class="stock-document-exit-line-actions">
+                                <button class="btn btn-secondary" type="button" @onclick="ReinitialiserDraft">Reinitialiser la ligne</button>
+                                <button class="btn btn-primary" type="button" @onclick="AjouterLigne">Ajouter la ligne</button>
+                            </div>
+                        </div>
+
+                        <div class="editor-section">
+                            <div class="stock-document-exit-title-row">
+                                <div>
+                                    <div class="form-section-title">Lignes du document</div>
+                                    <p class="stock-document-exit-help">@lignes.Count ligne(s) pretes a etre enregistrees.</p>
+                                </div>
+                                <div class="stock-document-exit-summary">
+                                    <span><strong>@lignes.Sum(l => l.Quantite)</strong> unite(s)</span>
+                                    <span><strong>@Devise.FormatAmount(lignes.Sum(l => l.Quantite * l.PrixUnitaire))</strong></span>
+                                </div>
+                            </div>
+
+                            @if (lignes.Count == 0)
+                            {
+                                <div class="empty-state">Ajoutez au moins une ligne pour creer le document de sortie.</div>
+                            }
+                            else
+                            {
+                                <div class="table-container">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Article</th>
+                                                <th>Emplacement</th>
+                                                <th class="text-right">Quantite</th>
+                                                <th class="text-right">PU</th>
+                                                <th class="text-right">Total</th>
+                                                <th>Lot / Serie</th>
+                                                <th>Motif</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var ligne in lignes.Select((value, index) => new { value, index }))
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="cell-main">@ligne.value.ArticleDesignation</div>
+                                                        <div class="cell-sub"><code>@ligne.value.ArticleCode</code></div>
+                                                    </td>
+                                                    <td>@ligne.value.EmplacementCode</td>
+                                                    <td class="text-right mono">@ligne.value.Quantite</td>
+                                                    <td class="text-right mono">@Devise.FormatAmount(ligne.value.PrixUnitaire)</td>
+                                                    <td class="text-right mono">@Devise.FormatAmount(ligne.value.Quantite * ligne.value.PrixUnitaire)</td>
+                                                    <td class="text-muted small">@FormatLotSerie(ligne.value)</td>
+                                                    <td class="text-muted small">@(string.IsNullOrWhiteSpace(ligne.value.Motif) ? "-" : ligne.value.Motif)</td>
+                                                    <td class="text-right">
+                                                        <button class="btn-row-action btn-row-action--danger" type="button" @onclick="() => SupprimerLigne(ligne.index)">Retirer</button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <aside class="editor-side">
-                <div class="editor-side-card">
-                    <h3>Reperes</h3>
-                    <ul class="editor-hints">
-                        <li>Utilisez un motif explicite pour faciliter les controles.</li>
-                        <li>La reference peut correspondre a un BL, une mission ou un ordre interne.</li>
-                        <li>Pour un article serialize, la quantite est fixee a 1 et le numero de serie devient obligatoire.</li>
-                    </ul>
-                </div>
-            </aside>
-        </section>
+                    <aside class="editor-side">
+                        <div class="editor-side-card">
+                            <h3>Reperes</h3>
+                            <ul class="editor-hints">
+                                <li>La reference identifie le document complet, pas une ligne isolee.</li>
+                                <li>Un article sans suivi de stock ne doit pas etre ajoute ici.</li>
+                                <li>Pour un article serialise, la quantite est forcee a 1 et le numero de serie devient obligatoire.</li>
+                                <li>Le document apparaitra ensuite dans <strong>Stocks</strong> avec toutes ses lignes.</li>
+                            </ul>
+                        </div>
+                    </aside>
+                </section>
 
-        <div class="editor-footer">
-            <div></div>
-            <div class="editor-footer-actions">
-                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
-                <button class="btn btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer la sortie")</button>
-            </div>
+                <div class="editor-footer">
+                    <div></div>
+                    <div class="editor-footer-actions">
+                        <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                        <button class="btn btn-primary" @onclick="EnregistrerDocument" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer le document")</button>
+                    </div>
+                </div>
+            }
         </div>
-    }
+    </section>
 </div>
 
 @code {
-    private List<StockResumeDto> stocks = new();
+    private sealed class SortieDraft
+    {
+        public Guid ArticleId { get; set; }
+        public Guid EmplacementId { get; set; }
+        public int Quantite { get; set; } = 1;
+        public decimal PrixUnitaire { get; set; }
+        public string? NumeroLot { get; set; }
+        public string? NumeroSerie { get; set; }
+        public string? Motif { get; set; }
+    }
+
+    private sealed class SortieLineVm
+    {
+        public Guid ArticleId { get; init; }
+        public string ArticleCode { get; init; } = string.Empty;
+        public string ArticleDesignation { get; init; } = string.Empty;
+        public Guid EmplacementId { get; init; }
+        public string EmplacementCode { get; init; } = string.Empty;
+        public int Quantite { get; init; }
+        public decimal PrixUnitaire { get; init; }
+        public string? NumeroLot { get; init; }
+        public string? NumeroSerie { get; init; }
+        public string? Motif { get; init; }
+    }
+
+    private readonly List<SortieLineVm> lignes = new();
+    private readonly SortieDraft draft = new();
+    private List<ArticleDto> articles = new();
     private List<EmplacementDto> emplacements = new();
     private bool chargement = true;
     private bool saving;
+    private bool isMaximized;
+    private bool isMinimized;
+    private bool jsReady;
     private string? message;
     private string msgCls = "alert-success";
+    private DateTime dateDocument = DateTime.Today;
+    private string reference = $"SOR-{DateTime.Today:yyyyMMdd-HHmm}";
+    private string? motifDocument;
+    private ArticleDto? draftArticle;
+    private IJSObjectReference? stockExitWindowModule;
 
-    private Guid selectedArticleId = Guid.Empty;
-    private Guid selectedEmplacementId = Guid.Empty;
-    private int quantite = 1;
-    private string reference = string.Empty;
-    private string? numeroLot;
-    private string? numeroSerie;
-    private string? motif;
-    private ArticleDto? selectedArticle;
-    private bool ArticleSerialise => selectedArticle?.GestionNumeroDeSerie == true;
+    private bool DraftArticleSerialise => draftArticle?.GestionNumeroDeSerie == true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -137,50 +290,184 @@
         await Charger();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || jsReady)
+            return;
+
+        var module = await EnsureStockExitWindowModuleAsync();
+        await module.InvokeVoidAsync("initializeFloatingWindow", "stock-exit-window", "stock-exit-header");
+        jsReady = true;
+    }
+
     private async Task Charger()
     {
         chargement = true;
-        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
-        emplacements = (await Api.GetEmplacementsAsync()) ?? new();
+
+        var articlesTask = Api.GetArticlesAsync(1, 500, null, null);
+        var emplacementsTask = Api.GetEmplacementsAsync();
+        await Task.WhenAll(articlesTask, emplacementsTask);
+
+        articles = ((await articlesTask)?.Items ?? Enumerable.Empty<ArticleDto>())
+            .Where(a => !a.SansSuiviStock)
+            .OrderBy(a => a.Designation)
+            .ToList();
+
+        emplacements = (await emplacementsTask) ?? new();
         chargement = false;
     }
 
     private void RetourListe() => Nav.NavigateTo("/stocks");
 
-    private async Task OnArticleChanged()
-    {
-        selectedArticle = selectedArticleId == Guid.Empty
-            ? null
-            : await Api.GetArticleAsync(selectedArticleId);
+    private void Fermer() => Nav.NavigateTo("/stocks");
 
-        if (ArticleSerialise)
+    private void BasculerReduction()
+    {
+        isMinimized = !isMinimized;
+    }
+
+    private async Task BasculerAgrandissement()
+    {
+        isMaximized = !isMaximized;
+        if (isMaximized)
         {
-            quantite = 1;
+            isMinimized = false;
         }
-        else
+
+        if (stockExitWindowModule is not null)
         {
-            numeroSerie = null;
+            await stockExitWindowModule.InvokeVoidAsync("setWindowMaximized", "stock-exit-window", isMaximized);
         }
     }
 
-    private async Task Enregistrer()
+    private Task OnDraftArticleChanged()
     {
-        if (selectedArticleId == Guid.Empty || selectedEmplacementId == Guid.Empty || quantite <= 0 || string.IsNullOrWhiteSpace(reference))
+        draftArticle = articles.FirstOrDefault(a => a.Id == draft.ArticleId);
+
+        if (DraftArticleSerialise)
+        {
+            draft.Quantite = 1;
+        }
+        else
+        {
+            draft.NumeroSerie = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ReinitialiserDraft()
+    {
+        draft.ArticleId = Guid.Empty;
+        draft.EmplacementId = Guid.Empty;
+        draft.Quantite = 1;
+        draft.PrixUnitaire = 0;
+        draft.NumeroLot = null;
+        draft.NumeroSerie = null;
+        draft.Motif = null;
+        draftArticle = null;
+        message = null;
+    }
+
+    private Task AjouterLigne()
+    {
+        var article = articles.FirstOrDefault(a => a.Id == draft.ArticleId);
+        var emplacement = emplacements.FirstOrDefault(e => e.Id == draft.EmplacementId);
+
+        if (article is null || emplacement is null)
         {
             msgCls = "alert-error";
-            message = "Renseignez les champs obligatoires avant d'enregistrer.";
+            message = "Selectionnez un article et un emplacement valides avant d'ajouter la ligne.";
+            return Task.CompletedTask;
+        }
+
+        if (draft.Quantite <= 0)
+        {
+            msgCls = "alert-error";
+            message = "La quantite de la ligne doit etre superieure a zero.";
+            return Task.CompletedTask;
+        }
+
+        if (article.GestionNumeroDeSerie)
+        {
+            if (draft.Quantite != 1)
+            {
+                msgCls = "alert-error";
+                message = "Un article serialise doit etre saisi avec une quantite egale a 1.";
+                return Task.CompletedTask;
+            }
+
+            if (string.IsNullOrWhiteSpace(draft.NumeroSerie))
+            {
+                msgCls = "alert-error";
+                message = "Le numero de serie est obligatoire pour cet article.";
+                return Task.CompletedTask;
+            }
+        }
+
+        lignes.Add(new SortieLineVm
+        {
+            ArticleId = article.Id,
+            ArticleCode = article.Code,
+            ArticleDesignation = article.Designation,
+            EmplacementId = emplacement.Id,
+            EmplacementCode = $"[{emplacement.Zone}] {emplacement.Code}",
+            Quantite = draft.Quantite,
+            PrixUnitaire = draft.PrixUnitaire,
+            NumeroLot = draft.NumeroLot,
+            NumeroSerie = draft.NumeroSerie,
+            Motif = draft.Motif
+        });
+
+        msgCls = "alert-success";
+        message = "Ligne ajoutee au document.";
+        ReinitialiserDraft();
+        return Task.CompletedTask;
+    }
+
+    private void SupprimerLigne(int index)
+    {
+        if (index < 0 || index >= lignes.Count)
+            return;
+
+        lignes.RemoveAt(index);
+        message = lignes.Count == 0 ? "La ligne a ete retiree du document." : "Ligne retiree du document.";
+        msgCls = "alert-success";
+    }
+
+    private async Task EnregistrerDocument()
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            msgCls = "alert-error";
+            message = "La reference du document est obligatoire.";
+            return;
+        }
+
+        if (lignes.Count == 0)
+        {
+            msgCls = "alert-error";
+            message = "Ajoutez au moins une ligne avant d'enregistrer le document.";
             return;
         }
 
         saving = true;
-        var result = await Api.SortieStockAsync(new SortieStockDto(
-            selectedArticleId,
-            selectedEmplacementId,
-            quantite,
-            reference,
-            numeroLot,
-            numeroSerie,
-            motif));
+        var result = await Api.CreerDocumentSortieStockAsync(new DocumentSortieStockRequest
+        {
+            DateDocument = dateDocument,
+            Reference = reference,
+            Motif = motifDocument,
+            Lignes = lignes.Select(l => new LigneDocumentSortieStockRequest
+            {
+                ArticleId = l.ArticleId,
+                EmplacementId = l.EmplacementId,
+                Quantite = l.Quantite,
+                PrixUnitaire = l.PrixUnitaire,
+                NumeroLot = l.NumeroLot,
+                NumeroSerie = l.NumeroSerie,
+                Motif = l.Motif
+            }).ToList()
+        });
         saving = false;
 
         msgCls = result?.Succes == true ? "alert-success" : "alert-error";
@@ -188,6 +475,35 @@
         if (result?.Succes == true)
         {
             Nav.NavigateTo("/stocks");
+        }
+    }
+
+    private static string FormatLotSerie(SortieLineVm ligne)
+    {
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+            return $"Serie: {ligne.NumeroSerie}";
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroLot))
+            return $"Lot: {ligne.NumeroLot}";
+        return "-";
+    }
+
+    private async Task<IJSObjectReference> EnsureStockExitWindowModuleAsync()
+    {
+        stockExitWindowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/windowing.js");
+        return stockExitWindowModule;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (stockExitWindowModule is not null)
+        {
+            try
+            {
+                await stockExitWindowModule.DisposeAsync();
+            }
+            catch
+            {
+            }
         }
     }
 }

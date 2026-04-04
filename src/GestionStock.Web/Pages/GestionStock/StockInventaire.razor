@@ -2,169 +2,394 @@
 @attribute [Authorize]
 @inject IApiService Api
 @inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ICurrencyService Devise
+@implements IAsyncDisposable
 
 <PageTitle>Inventaire de stock - GestionStock</PageTitle>
 
-<div class="stock-operation-page stock-inventory-page">
-    <div class="page-header">
-        <div>
-            <h1 class="page-title">Inventaire</h1>
-            <p class="page-subtitle">Saisissez les quantites reelles et validez les ajustements depuis une page dediee.</p>
-        </div>
-        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux stocks</button>
-    </div>
+<HeadContent>
+    <link rel="stylesheet" href="/css/stock-inventaire-window.css?v=20260403a" />
+</HeadContent>
 
-    <section class="surface-hero surface-hero--compact stock-operation-hero">
-        <div class="surface-hero-copy">
-            <span class="surface-hero-eyebrow">Controle physique</span>
-            <h2>Comparez le theorique et le compte pour fiabiliser votre stock.</h2>
-            <p>Seules les lignes modifiees seront ajustees lors de la validation.</p>
-        </div>
-        <div class="surface-hero-pills">
-            <span class="surface-pill">Theorique</span>
-            <span class="surface-pill">Compte</span>
-            <span class="surface-pill">Ecart</span>
+<div class="stock-inventory-page">
+    <div class="stock-inventory-page__overlay"></div>
+
+    <section id="stock-inventory-window"
+             class="stock-inventory-window @(isMaximized ? "stock-inventory-window--maximized workspace-window--maximized" : null) @(isMinimized ? "stock-inventory-window--minimized" : null)">
+        <header id="stock-inventory-header"
+                class="stock-inventory-window__header @(isMaximized ? null : "stock-inventory-window__header--draggable")">
+            <div class="stock-inventory-window__heading">
+                <div class="stock-inventory-window__breadcrumb">Stocks / Nouveau document / Inventaire</div>
+                <h1 class="stock-inventory-window__title">Assistant d'inventaire</h1>
+                <p class="stock-inventory-window__subtitle">Demarrez par le choix du depot et de la date, puis passez au comptage article par article.</p>
+            </div>
+
+            <div class="stock-inventory-window__controls">
+                <button type="button"
+                        class="stock-window-btn"
+                        title="Reduire"
+                        aria-label="Reduire"
+                        @onclick="BasculerReduction">
+                    Reduire
+                </button>
+                <button type="button"
+                        class="stock-window-btn"
+                        title="@(isMaximized ? "Restaurer" : "Agrandir")"
+                        aria-label="@(isMaximized ? "Restaurer" : "Agrandir")"
+                        @onclick="BasculerAgrandissement">
+                    @(isMaximized ? "Restaurer" : "Agrandir")
+                </button>
+                <button type="button"
+                        class="stock-window-btn stock-window-btn--danger"
+                        title="Fermer"
+                        aria-label="Fermer"
+                        @onclick="Fermer">
+                    Fermer
+                </button>
+            </div>
+        </header>
+
+        <div class="stock-inventory-window__body" style="display:@(isMinimized ? "none" : "block");">
+            <section class="surface-hero surface-hero--compact stock-operation-hero">
+                <div class="surface-hero-copy">
+                    <span class="surface-hero-eyebrow">Inventaire assiste</span>
+                    @if (etape == 1)
+                    {
+                        <h2>Choisissez d'abord le depot et la date de comptage.</h2>
+                        <p>Une fois valides, tous les articles seront charges avec leur quantite theorique et leur valeur de stock pour faciliter le comptage.</p>
+                    }
+                    else
+                    {
+                        <h2>Comptez vos articles dans une grille claire, prete pour le controle physique.</h2>
+                        <p>Le depot choisi reste applique a toute la session. Saisissez les quantites comptees, les ecarts se calculent automatiquement.</p>
+                    }
+                </div>
+                <div class="surface-hero-pills">
+                    <span class="surface-pill @(etape == 1 ? "surface-pill--active" : null)">Depot</span>
+                    <span class="surface-pill @(etape == 1 ? "surface-pill--active" : null)">Date</span>
+                    <span class="surface-pill @(etape == 2 ? "surface-pill--active" : null)">Comptage</span>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="@msgCls">@message</div>
+            }
+
+            @if (chargement)
+            {
+                <div class="loading-state"><div class="spinner-lg"></div></div>
+            }
+            else if (etape == 1)
+            {
+                <section class="editor-shell inventory-wizard-shell">
+                    <div class="editor-card inventory-wizard-card">
+                        <div class="editor-section">
+                            <div class="form-section-title">Etape 1 - Parametres de l'inventaire</div>
+                            <div class="editor-grid inventory-setup-grid">
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Stock / depot *</label>
+                                    <select class="field-input" @bind="depotSelectionneId">
+                                        <option value="@Guid.Empty">Selectionner un depot</option>
+                                        @foreach (var depot in depots)
+                                        {
+                                            <option value="@depot.Id">[@depot.Code] @depot.Libelle</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Date d'inventaire *</label>
+                                    <input class="field-input" type="date" @bind="dateInventaire" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="editor-section inventory-setup-note">
+                            <div class="form-section-title">Ce qui se passe ensuite</div>
+                            <ul class="editor-hints">
+                                <li>La liste complete des articles sera chargee apres validation de cette etape.</li>
+                                <li>Le depot choisi apparaitra comme contexte sur chaque ligne.</li>
+                                <li>Vous saisirez ensuite la quantite comptee, l'ecart et la valeur de stock resteront visibles.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="editor-footer">
+                    <div></div>
+                    <div class="editor-footer-actions">
+                        <button class="btn btn-secondary" @onclick="RetourListe">Annuler</button>
+                        <button class="btn btn-primary" @onclick="PasserAuComptage" disabled="@(depotSelectionneId == Guid.Empty || chargementComptage)">
+                            @(chargementComptage ? "Chargement..." : "Valider et continuer")
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="inventory-assistant-surface">
+                    <section class="inventory-context-bar">
+                        <div class="inventory-context-bar__item">
+                            <span class="inventory-context-bar__label">Depot</span>
+                            <strong>@DepotSelectionneLibelle</strong>
+                        </div>
+                        <div class="inventory-context-bar__item">
+                            <span class="inventory-context-bar__label">Date</span>
+                            <strong>@dateInventaire.ToString("dd/MM/yyyy")</strong>
+                        </div>
+                        <div class="inventory-context-bar__item">
+                            <span class="inventory-context-bar__label">Articles</span>
+                            <strong>@lignesInventaire.Count</strong>
+                        </div>
+                        <div class="inventory-context-bar__item">
+                            <span class="inventory-context-bar__label">Lignes modifiees</span>
+                            <strong>@lignesInventaire.Count(l => l.Modifiee)</strong>
+                        </div>
+                    </section>
+
+                    <div class="editor-card inventory-assistant-card">
+                        <div class="editor-section">
+                            <div class="inventory-toolbar">
+                                <div class="field-group inventory-search-group">
+                                    <label class="field-label">Rechercher un article</label>
+                                    <input class="field-input" type="text" @bind="rechercheInv" @bind:event="oninput" placeholder="Code, designation..." />
+                                </div>
+                                <div class="inventory-toolbar__summary text-muted">
+                                    @LignesInvFiltrees.Count() article(s) affiche(s)
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="editor-section">
+                            <div class="form-section-title">Etape 2 - Comptage</div>
+                            <div class="table-container inventory-table-wrap">
+                                <table class="data-table inventory-data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Article</th>
+                                            <th>Depot</th>
+                                            <th class="text-right">Qte theorique</th>
+                                            <th class="text-right inventory-count-col">Qte comptee *</th>
+                                            <th class="text-right">Ecart</th>
+                                            <th class="text-right">Valeur de stock</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var ligne in LignesInvFiltrees)
+                                        {
+                                            var ecartCls = ligne.Ecart > 0 ? "text-success" : ligne.Ecart < 0 ? "text-danger" : "text-muted";
+                                            <tr class="@(ligne.Modifiee ? "row-inv-modified" : "")">
+                                                <td>
+                                                    <div class="cell-main">@ligne.ArticleDesignation</div>
+                                                    <div class="cell-sub"><code>@ligne.ArticleCode</code></div>
+                                                </td>
+                                                <td>
+                                                    <div class="cell-main">@ligne.DepotLibelle</div>
+                                                    <div class="cell-sub text-muted">@ligne.DepotCode</div>
+                                                </td>
+                                                <td class="text-right mono">@ligne.QuantiteTheorique</td>
+                                                <td class="text-right">
+                                                    <input class="field-input inv-qty-input"
+                                                           type="number"
+                                                           min="0"
+                                                           value="@ligne.QuantiteComptee"
+                                                           @onchange="(e) => OnQuantiteChange(ligne, e)" />
+                                                </td>
+                                                <td class="text-right mono @ecartCls">@(ligne.Ecart >= 0 ? "+" : "")@ligne.Ecart</td>
+                                                <td class="text-right mono">@Devise.FormatAmount(ligne.ValeurStock)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="editor-footer">
+                    <div class="editor-footer-left text-muted">
+                        @if (!validationDisponible)
+                        {
+                            <span>Validation indisponible tant qu'aucun emplacement par defaut n'est disponible.</span>
+                        }
+                        else
+                        {
+                            <span>@lignesInventaire.Count(l => l.Modifiee) ligne(s) modifiee(s)</span>
+                        }
+                    </div>
+                    <div class="editor-footer-actions">
+                        <button class="btn btn-secondary" @onclick="RetourEtapeConfiguration" disabled="@saving">Retour</button>
+                        <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Fermer</button>
+                        <button class="btn btn-primary"
+                                @onclick="ValiderInventaire"
+                                disabled="@(saving || !validationDisponible || !lignesInventaire.Any(l => l.Modifiee))">
+                            @(saving ? "Validation..." : "Valider les ajustements")
+                        </button>
+                    </div>
+                </div>
+            }
         </div>
     </section>
-
-    @if (!string.IsNullOrWhiteSpace(message))
-    {
-        <div class="@msgCls">@message</div>
-    }
-
-    @if (chargement)
-    {
-        <div class="loading-state"><div class="spinner-lg"></div></div>
-    }
-    else
-    {
-        <div class="editor-card">
-            <div class="editor-section">
-                <div class="form-section-title">Filtres</div>
-                <div class="editor-grid">
-                    <div class="field-group">
-                        <label class="field-label">Rechercher un article</label>
-                        <input class="field-input" type="text" @bind="rechercheInv" @bind:event="oninput" placeholder="Code, designation..." />
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Emplacement</label>
-                        <select class="field-input" @bind="emplacementInvId">
-                            <option value="@Guid.Empty">Tous les emplacements</option>
-                            @foreach (var e in emplacements)
-                            {
-                                <option value="@e.Id">[@e.Zone] @e.Code</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <div class="editor-section">
-                <div class="form-section-title">Lignes d'inventaire</div>
-                <div class="table-container inventory-table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Article</th>
-                                <th>Emplacement</th>
-                                <th class="text-right">Theorique</th>
-                                <th class="text-right inventory-count-col">Compte *</th>
-                                <th class="text-right">Ecart</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var ligne in LignesInvFiltrees)
-                            {
-                                var ecartCls = ligne.Ecart > 0 ? "text-success" : ligne.Ecart < 0 ? "text-danger" : "text-muted";
-                                <tr class="@(ligne.Modifiee ? "row-inv-modified" : "")">
-                                    <td>
-                                        <div class="cell-main">@ligne.ArticleDesignation</div>
-                                        <div class="cell-sub"><code>@ligne.ArticleCode</code></div>
-                                    </td>
-                                    <td class="text-muted">@ligne.EmplacementCode</td>
-                                    <td class="text-right mono">@ligne.QuantiteTheorique</td>
-                                    <td class="text-right">
-                                        <input class="field-input inv-qty-input"
-                                               type="number" min="0"
-                                               value="@ligne.QuantiteComptee"
-                                               @onchange="(e) => OnQuantiteChange(ligne, e)" />
-                                    </td>
-                                    <td class="text-right mono @ecartCls">@(ligne.Ecart >= 0 ? "+" : "")@ligne.Ecart</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="editor-footer">
-            <div class="editor-footer-left text-muted">@lignesInventaire.Count(l => l.Modifiee) ligne(s) modifiee(s)</div>
-            <div class="editor-footer-actions">
-                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Fermer</button>
-                <button class="btn btn-primary" @onclick="ValiderInventaire" disabled="@(saving || !lignesInventaire.Any(l => l.Modifiee))">@(saving ? "Validation..." : "Valider les ajustements")</button>
-            </div>
-        </div>
-    }
 </div>
 
 @code {
+    private sealed class InventaireLineVm
+    {
+        public Guid ArticleId { get; init; }
+        public string ArticleCode { get; init; } = string.Empty;
+        public string ArticleDesignation { get; init; } = string.Empty;
+        public Guid DepotId { get; init; }
+        public string DepotCode { get; init; } = string.Empty;
+        public string DepotLibelle { get; init; } = string.Empty;
+        public Guid EmplacementId { get; init; }
+        public int QuantiteTheorique { get; set; }
+        public int QuantiteComptee { get; set; }
+        public decimal ValeurStock { get; init; }
+        public bool Modifiee { get; set; }
+        public int Ecart => QuantiteComptee - QuantiteTheorique;
+    }
+
     private List<StockResumeDto> stocks = new();
+    private List<DepotDto> depots = new();
     private List<EmplacementDto> emplacements = new();
-    private List<LigneInventaireSaisie> lignesInventaire = new();
+    private readonly List<InventaireLineVm> lignesInventaire = new();
     private bool chargement = true;
+    private bool chargementComptage;
     private bool saving;
+    private bool isMaximized;
+    private bool isMinimized;
+    private bool jsReady;
+    private int etape = 1;
+    private Guid depotSelectionneId = Guid.Empty;
+    private DateTime dateInventaire = DateTime.Today;
     private string? message;
     private string msgCls = "alert-success";
     private string rechercheInv = string.Empty;
-    private Guid emplacementInvId = Guid.Empty;
+    private IJSObjectReference? stockInventoryWindowModule;
+
+    private bool validationDisponible => emplacements.Any() && lignesInventaire.All(l => l.EmplacementId != Guid.Empty);
+
+    private IEnumerable<InventaireLineVm> LignesInvFiltrees =>
+        lignesInventaire.Where(l =>
+            string.IsNullOrWhiteSpace(rechercheInv) ||
+            l.ArticleCode.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase) ||
+            l.ArticleDesignation.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase));
+
+    private string DepotSelectionneLibelle =>
+        depots.FirstOrDefault(d => d.Id == depotSelectionneId) is { } depot
+            ? $"[{depot.Code}] {depot.Libelle}"
+            : "Depot non defini";
 
     protected override async Task OnInitializedAsync()
     {
-        await Charger();
+        await Devise.EnsureLoadedAsync();
+        await ChargerInitial();
     }
 
-    private async Task Charger()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || jsReady)
+            return;
+
+        var module = await EnsureStockInventoryWindowModuleAsync();
+        await module.InvokeVoidAsync("initializeFloatingWindow", "stock-inventory-window", "stock-inventory-header");
+        jsReady = true;
+    }
+
+    private async Task ChargerInitial()
     {
         chargement = true;
-        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
-        emplacements = (await Api.GetEmplacementsAsync()) ?? new();
-        ConstruireLignes();
+
+        var depotsTask = Api.GetDepotsAsync();
+        var emplacementsTask = Api.GetEmplacementsAsync();
+        await Task.WhenAll(depotsTask, emplacementsTask);
+
+        depots = (await depotsTask) ?? new();
+        emplacements = (await emplacementsTask) ?? new();
+
+        if (depotSelectionneId == Guid.Empty && depots.Count == 1)
+        {
+            depotSelectionneId = depots[0].Id;
+        }
+
         chargement = false;
+    }
+
+    private async Task PasserAuComptage()
+    {
+        if (depotSelectionneId == Guid.Empty)
+        {
+            msgCls = "alert-error";
+            message = "Selectionnez d'abord le depot a inventorier.";
+            return;
+        }
+
+        chargementComptage = true;
+        message = null;
+
+        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
+        ConstruireLignes();
+        etape = 2;
+
+        chargementComptage = false;
     }
 
     private void ConstruireLignes()
     {
-        lignesInventaire = stocks.Select(s => new LigneInventaireSaisie
-        {
-            ArticleId = s.ArticleId,
-            ArticleCode = s.ArticleCode,
-            ArticleDesignation = s.ArticleDesignation,
-            EmplacementId = emplacements.FirstOrDefault()?.Id ?? Guid.Empty,
-            EmplacementCode = emplacements.FirstOrDefault()?.Code ?? "-",
-            QuantiteTheorique = s.QuantiteDisponible,
-            QuantiteComptee = s.QuantiteDisponible,
-            Modifiee = false
-        }).ToList();
-    }
+        lignesInventaire.Clear();
 
-    private IEnumerable<LigneInventaireSaisie> LignesInvFiltrees
-    {
-        get
+        var depot = depots.FirstOrDefault(d => d.Id == depotSelectionneId);
+        var emplacementDefaut = emplacements.FirstOrDefault();
+
+        foreach (var stock in stocks.OrderBy(s => s.ArticleDesignation))
         {
-            var q = lignesInventaire.AsEnumerable();
-            if (!string.IsNullOrWhiteSpace(rechercheInv))
-                q = q.Where(l => l.ArticleCode.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase) ||
-                                 l.ArticleDesignation.Contains(rechercheInv, StringComparison.OrdinalIgnoreCase));
-            if (emplacementInvId != Guid.Empty)
-                q = q.Where(l => l.EmplacementId == emplacementInvId);
-            return q;
+            lignesInventaire.Add(new InventaireLineVm
+            {
+                ArticleId = stock.ArticleId,
+                ArticleCode = stock.ArticleCode,
+                ArticleDesignation = stock.ArticleDesignation,
+                DepotId = depotSelectionneId,
+                DepotCode = depot?.Code ?? "-",
+                DepotLibelle = depot?.Libelle ?? "Depot",
+                EmplacementId = emplacementDefaut?.Id ?? Guid.Empty,
+                QuantiteTheorique = stock.QuantiteDisponible,
+                QuantiteComptee = stock.QuantiteDisponible,
+                ValeurStock = stock.ValeurStock,
+                Modifiee = false
+            });
         }
     }
 
     private void RetourListe() => Nav.NavigateTo("/stocks");
+    private void Fermer() => Nav.NavigateTo("/stocks");
 
-    private void OnQuantiteChange(LigneInventaireSaisie ligne, ChangeEventArgs e)
+    private void RetourEtapeConfiguration()
+    {
+        etape = 1;
+        message = null;
+    }
+
+    private void BasculerReduction()
+    {
+        isMinimized = !isMinimized;
+    }
+
+    private async Task BasculerAgrandissement()
+    {
+        isMaximized = !isMaximized;
+        if (isMaximized)
+        {
+            isMinimized = false;
+        }
+
+        if (stockInventoryWindowModule is not null)
+        {
+            await stockInventoryWindowModule.InvokeVoidAsync("setWindowMaximized", "stock-inventory-window", isMaximized);
+        }
+    }
+
+    private void OnQuantiteChange(InventaireLineVm ligne, ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out var val))
         {
@@ -190,7 +415,7 @@
                 ArticleId = ligne.ArticleId,
                 EmplacementId = ligne.EmplacementId,
                 QuantiteReelle = ligne.QuantiteComptee,
-                Motif = $"Inventaire manuel - {DateTime.Now:dd/MM/yyyy}"
+                Motif = $"Inventaire {DepotSelectionneLibelle} - {dateInventaire:dd/MM/yyyy}"
             });
 
             if (result?.Succes == true)
@@ -207,11 +432,34 @@
 
         saving = false;
         msgCls = erreurs == 0 ? "alert-success" : "alert-error";
-        message = erreurs == 0 ? $"{ok} ajustement(s) enregistre(s) avec succes." : $"{ok} succes, {erreurs} erreur(s).";
+        message = erreurs == 0
+            ? $"{ok} ajustement(s) enregistre(s) avec succes."
+            : $"{ok} succes, {erreurs} erreur(s).";
 
         if (erreurs == 0)
         {
-            await Charger();
+            stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
+            ConstruireLignes();
+        }
+    }
+
+    private async Task<IJSObjectReference> EnsureStockInventoryWindowModuleAsync()
+    {
+        stockInventoryWindowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/windowing.js");
+        return stockInventoryWindowModule;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (stockInventoryWindowModule is not null)
+        {
+            try
+            {
+                await stockInventoryWindowModule.DisposeAsync();
+            }
+            catch
+            {
+            }
         }
     }
 }

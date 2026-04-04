@@ -134,6 +134,25 @@ public class LigneDocumentEntreeStockRequest
     public string? Motif { get; set; }
 }
 
+public class DocumentSortieStockRequest
+{
+    public DateTime DateDocument { get; set; } = DateTime.Today;
+    public string Reference { get; set; } = string.Empty;
+    public string? Motif { get; set; }
+    public List<LigneDocumentSortieStockRequest> Lignes { get; set; } = new();
+}
+
+public class LigneDocumentSortieStockRequest
+{
+    public Guid ArticleId { get; set; }
+    public Guid EmplacementId { get; set; }
+    public int Quantite { get; set; }
+    public decimal PrixUnitaire { get; set; }
+    public string? NumeroLot { get; set; }
+    public string? NumeroSerie { get; set; }
+    public string? Motif { get; set; }
+}
+
 public record SortieStockDto(
     Guid ArticleId, Guid EmplacementId, int Quantite,
     string Reference, string? NumeroLot, string? NumeroSerie, string? Motif);
@@ -295,6 +314,27 @@ public class TransfertRequest
     public Guid EmplacementDestinationId { get; set; }
     public int Quantite { get; set; }
     public string? NumeroLot { get; set; }
+}
+
+public class DocumentTransfertStockRequest
+{
+    public DateTime DateDocument { get; set; } = DateTime.Today;
+    public string Reference { get; set; } = string.Empty;
+    public Guid EmplacementSourceId { get; set; }
+    public Guid EmplacementDestinationId { get; set; }
+    public string? Demandeur { get; set; }
+    public string? Motif { get; set; }
+    public List<LigneDocumentTransfertStockRequest> Lignes { get; set; } = new();
+}
+
+public class LigneDocumentTransfertStockRequest
+{
+    public Guid ArticleId { get; set; }
+    public int Quantite { get; set; }
+    public decimal PrixUnitaire { get; set; }
+    public string? NumeroLot { get; set; }
+    public string? NumeroSerie { get; set; }
+    public string? Motif { get; set; }
 }
 
 public class AjustementRequest

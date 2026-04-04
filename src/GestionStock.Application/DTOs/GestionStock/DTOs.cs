@@ -185,6 +185,25 @@ public class CreerLigneDocumentStockEntreeDto
     public string? Motif { get; set; }
 }
 
+public class CreerDocumentStockSortieDto
+{
+    public DateTime DateDocument { get; set; } = DateTime.Today;
+    public string Reference { get; set; } = string.Empty;
+    public string? Motif { get; set; }
+    public List<CreerLigneDocumentStockSortieDto> Lignes { get; set; } = new();
+}
+
+public class CreerLigneDocumentStockSortieDto
+{
+    public Guid ArticleId { get; set; }
+    public Guid EmplacementId { get; set; }
+    public int Quantite { get; set; }
+    public decimal PrixUnitaire { get; set; }
+    public string? NumeroLot { get; set; }
+    public string? NumeroSerie { get; set; }
+    public string? Motif { get; set; }
+}
+
 public record SortieStockDto(
     Guid ArticleId,
     Guid EmplacementId,
@@ -202,6 +221,27 @@ public record TransfertStockDto(
     int Quantite,
     string? NumeroLot
 );
+
+public class CreerDocumentStockTransfertDto
+{
+    public DateTime DateDocument { get; set; } = DateTime.Today;
+    public string Reference { get; set; } = string.Empty;
+    public Guid EmplacementSourceId { get; set; }
+    public Guid EmplacementDestinationId { get; set; }
+    public string? Demandeur { get; set; }
+    public string? Motif { get; set; }
+    public List<CreerLigneDocumentStockTransfertDto> Lignes { get; set; } = new();
+}
+
+public class CreerLigneDocumentStockTransfertDto
+{
+    public Guid ArticleId { get; set; }
+    public int Quantite { get; set; }
+    public decimal PrixUnitaire { get; set; }
+    public string? NumeroLot { get; set; }
+    public string? NumeroSerie { get; set; }
+    public string? Motif { get; set; }
+}
 
 public record AjustementStockDto(
     Guid ArticleId,

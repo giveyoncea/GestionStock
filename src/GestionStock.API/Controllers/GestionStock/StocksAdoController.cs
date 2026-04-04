@@ -899,6 +899,286 @@ END";
         }
     }
 
+    [HttpPost("documents/sortie")]
+    [Authorize(Policy = "Magasinier")]
+    public async Task<IActionResult> CreerDocumentSortie([FromBody] CreerDocumentStockSortieDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Reference))
+            return BadRequest(new { succes = false, message = "La reference du document est obligatoire." });
+
+        if (dto.Lignes is null || dto.Lignes.Count == 0)
+            return BadRequest(new { succes = false, message = "Ajoutez au moins une ligne au document." });
+
+        if (dto.Lignes.Any(l => l.ArticleId == Guid.Empty || l.EmplacementId == Guid.Empty || l.Quantite <= 0))
+            return BadRequest(new { succes = false, message = "Chaque ligne doit contenir un article, un emplacement et une quantite valide." });
+
+        try
+        {
+            await using var conn = new SqlConnection(ConnStr);
+            await conn.OpenAsync();
+            await EnsureLegacyStockDefaultsAsync(conn);
+            await EnsureStockDocumentTablesAsync(conn);
+            var (stockTable, _, _) = await GetSchemaAsync(conn);
+            var autoriserStockNegatif = await IsStockNegatifAutoriseAsync(conn);
+
+            await using var tx = (SqlTransaction)await conn.BeginTransactionAsync();
+            var insertSql = (await BuildStockInsertSqlAsync(conn, stockTable, "@empId", tx)).Replace("@qte", "@qteInsert");
+            var movementSchema = await GetMovementInsertSchemaAsync(conn, tx);
+            var documentLines = new List<DocumentStockLineInput>();
+
+            foreach (var ligne in dto.Lignes)
+            {
+                var article = await GetArticleStockMetaAsync(conn, ligne.ArticleId, tx);
+                if (article is null)
+                    return BadRequest(new { succes = false, message = "Un article du document est introuvable." });
+
+                if (article.SansSuiviStock)
+                    return BadRequest(new { succes = false, message = $"L'article {article.Code} est configure sans suivi de stock." });
+
+                if (article.GestionNumeroDeSerie)
+                {
+                    if (ligne.Quantite != 1)
+                        return BadRequest(new { succes = false, message = $"L'article serialize {article.Code} doit avoir une quantite egale a 1." });
+
+                    if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                        return BadRequest(new { succes = false, message = $"Le numero de serie est obligatoire pour l'article {article.Code}." });
+                }
+
+                await using (var chkCmd = new SqlCommand(
+                    $"SELECT ISNULL(SUM(QuantiteDisponible),0) FROM {stockTable} WHERE ArticleId=@artId AND EmplacementId=@empId", conn, tx))
+                {
+                    chkCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    chkCmd.Parameters.AddWithValue("@empId", ligne.EmplacementId);
+                    var qteActuelle = Convert.ToDecimal(await chkCmd.ExecuteScalarAsync() ?? 0m);
+
+                    if (!autoriserStockNegatif && qteActuelle < ligne.Quantite)
+                        return BadRequest(new { succes = false, message = $"Stock insuffisant pour {article.Designation} : {qteActuelle} disponible(s)." });
+                }
+
+                var emplacementCode = await GetEmplacementCodeAsync(conn, ligne.EmplacementId, tx) ?? string.Empty;
+
+                await using (var updCmd = new SqlCommand($@"
+                    IF EXISTS (SELECT 1 FROM {stockTable} WHERE ArticleId=@artId AND EmplacementId=@empId)
+                        UPDATE {stockTable}
+                        SET QuantiteDisponible = QuantiteDisponible - @qte
+                        WHERE ArticleId=@artId AND EmplacementId=@empId
+                    ELSE
+                        {insertSql}", conn, tx))
+                {
+                    updCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    updCmd.Parameters.AddWithValue("@empId", ligne.EmplacementId);
+                    updCmd.Parameters.AddWithValue("@qte", ligne.Quantite);
+                    updCmd.Parameters.AddWithValue("@qteInsert", -ligne.Quantite);
+                    updCmd.Parameters.AddWithValue("@createdBy", UserId);
+                    await updCmd.ExecuteNonQueryAsync();
+                }
+
+                await using (var mvtCmd = new SqlCommand(
+                    BuildMovementInsertSql(movementSchema, 2, includeDestination: false), conn, tx))
+                {
+                    mvtCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    mvtCmd.Parameters.AddWithValue("@src", ligne.EmplacementId);
+                    mvtCmd.Parameters.AddWithValue("@qte", ligne.Quantite);
+                    mvtCmd.Parameters.AddWithValue("@prix", ligne.PrixUnitaire);
+                    mvtCmd.Parameters.AddWithValue("@ref", dto.Reference);
+                    mvtCmd.Parameters.AddWithValue("@motif", (object?)(ligne.Motif ?? dto.Motif) ?? DBNull.Value);
+                    mvtCmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
+                    mvtCmd.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
+                    mvtCmd.Parameters.AddWithValue("@user", UserId);
+                    await mvtCmd.ExecuteNonQueryAsync();
+                }
+
+                documentLines.Add(new DocumentStockLineInput(
+                    article.Id,
+                    article.Code,
+                    article.Designation,
+                    ligne.EmplacementId,
+                    emplacementCode,
+                    null,
+                    null,
+                    ligne.Quantite,
+                    ligne.PrixUnitaire,
+                    ligne.Quantite * ligne.PrixUnitaire,
+                    ligne.NumeroLot,
+                    ligne.NumeroSerie,
+                    ligne.Motif ?? dto.Motif));
+            }
+
+            var documentId = await CreateDocumentStockAsync(
+                conn,
+                tx,
+                2,
+                dto.DateDocument == default ? DateTime.UtcNow : dto.DateDocument,
+                dto.Reference,
+                dto.Motif,
+                UserId,
+                documentLines);
+
+            await tx.CommitAsync();
+
+            return Ok(new { succes = true, message = "Document de sortie enregistre.", data = documentId });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { succes = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost("documents/transfert")]
+    [Authorize(Policy = "Magasinier")]
+    public async Task<IActionResult> CreerDocumentTransfert([FromBody] CreerDocumentStockTransfertDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Reference))
+            return BadRequest(new { succes = false, message = "La reference du document est obligatoire." });
+
+        if (dto.EmplacementSourceId == Guid.Empty || dto.EmplacementDestinationId == Guid.Empty)
+            return BadRequest(new { succes = false, message = "Les emplacements source et destination sont obligatoires." });
+
+        if (dto.EmplacementSourceId == dto.EmplacementDestinationId)
+            return BadRequest(new { succes = false, message = "Les emplacements source et destination doivent etre differents." });
+
+        if (dto.Lignes is null || dto.Lignes.Count == 0)
+            return BadRequest(new { succes = false, message = "Ajoutez au moins une ligne au document." });
+
+        if (dto.Lignes.Any(l => l.ArticleId == Guid.Empty || l.Quantite <= 0))
+            return BadRequest(new { succes = false, message = "Chaque ligne doit contenir un article et une quantite valide." });
+
+        try
+        {
+            await using var conn = new SqlConnection(ConnStr);
+            await conn.OpenAsync();
+            await EnsureLegacyStockDefaultsAsync(conn);
+            await EnsureStockDocumentTablesAsync(conn);
+            var (stockTable, _, _) = await GetSchemaAsync(conn);
+            var autoriserStockNegatif = await IsStockNegatifAutoriseAsync(conn);
+
+            await using var tx = (SqlTransaction)await conn.BeginTransactionAsync();
+            var emplacementSourceCode = await GetEmplacementCodeAsync(conn, dto.EmplacementSourceId, tx) ?? string.Empty;
+            var emplacementDestinationCode = await GetEmplacementCodeAsync(conn, dto.EmplacementDestinationId, tx) ?? string.Empty;
+            var destinationInsertSql = await BuildStockInsertSqlAsync(conn, stockTable, "@dst", tx);
+            var movementSchema = await GetMovementInsertSchemaAsync(conn, tx);
+            var documentLines = new List<DocumentStockLineInput>();
+            var cumulsSource = new Dictionary<Guid, int>();
+            var numerosSerie = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var ligne in dto.Lignes)
+            {
+                var article = await GetArticleStockMetaAsync(conn, ligne.ArticleId, tx);
+                if (article is null)
+                    return BadRequest(new { succes = false, message = "Un article du document est introuvable." });
+
+                if (article.SansSuiviStock)
+                    return BadRequest(new { succes = false, message = $"L'article {article.Code} est configure sans suivi de stock." });
+
+                if (article.GestionNumeroDeSerie)
+                {
+                    if (ligne.Quantite != 1)
+                        return BadRequest(new { succes = false, message = $"L'article serialize {article.Code} doit avoir une quantite egale a 1." });
+
+                    if (string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+                        return BadRequest(new { succes = false, message = $"Le numero de serie est obligatoire pour l'article {article.Code}." });
+
+                    if (!numerosSerie.Add(ligne.NumeroSerie.Trim()))
+                        return BadRequest(new { succes = false, message = $"Le numero de serie {ligne.NumeroSerie} est duplique dans le document." });
+                }
+
+                cumulsSource.TryGetValue(ligne.ArticleId, out var cumulActuel);
+                var nouveauCumul = cumulActuel + ligne.Quantite;
+                cumulsSource[ligne.ArticleId] = nouveauCumul;
+
+                if (!autoriserStockNegatif)
+                {
+                    await using var chkCmd = new SqlCommand(
+                        $"SELECT ISNULL(SUM(QuantiteDisponible),0) FROM {stockTable} WHERE ArticleId=@artId AND EmplacementId=@src", conn, tx);
+                    chkCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    chkCmd.Parameters.AddWithValue("@src", dto.EmplacementSourceId);
+                    var qteSource = Convert.ToDecimal(await chkCmd.ExecuteScalarAsync() ?? 0m);
+                    if (qteSource < nouveauCumul)
+                        return BadRequest(new { succes = false, message = $"Stock insuffisant sur l'emplacement source pour {article.Designation} : {qteSource} disponible(s)." });
+                }
+
+                await using (var decCmd = new SqlCommand(
+                    $"UPDATE {stockTable} SET QuantiteDisponible = QuantiteDisponible - @qte WHERE ArticleId=@artId AND EmplacementId=@src", conn, tx))
+                {
+                    decCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    decCmd.Parameters.AddWithValue("@src", dto.EmplacementSourceId);
+                    decCmd.Parameters.AddWithValue("@qte", ligne.Quantite);
+                    await decCmd.ExecuteNonQueryAsync();
+                }
+
+                await using (var incCmd = new SqlCommand($@"
+                    IF EXISTS (SELECT 1 FROM {stockTable} WHERE ArticleId=@artId AND EmplacementId=@dst)
+                        UPDATE {stockTable}
+                        SET QuantiteDisponible = QuantiteDisponible + @qte
+                        WHERE ArticleId=@artId AND EmplacementId=@dst
+                    ELSE
+                        {destinationInsertSql}", conn, tx))
+                {
+                    incCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    incCmd.Parameters.AddWithValue("@dst", dto.EmplacementDestinationId);
+                    incCmd.Parameters.AddWithValue("@qte", ligne.Quantite);
+                    incCmd.Parameters.AddWithValue("@createdBy", UserId);
+                    await incCmd.ExecuteNonQueryAsync();
+                }
+
+                await using (var mvtCmd = new SqlCommand(
+                    BuildMovementInsertSql(movementSchema, 3, includeDestination: true), conn, tx))
+                {
+                    mvtCmd.Parameters.AddWithValue("@artId", ligne.ArticleId);
+                    mvtCmd.Parameters.AddWithValue("@src", dto.EmplacementSourceId);
+                    mvtCmd.Parameters.AddWithValue("@dst", dto.EmplacementDestinationId);
+                    mvtCmd.Parameters.AddWithValue("@qte", ligne.Quantite);
+                    mvtCmd.Parameters.AddWithValue("@prix", ligne.PrixUnitaire);
+                    mvtCmd.Parameters.AddWithValue("@ref", dto.Reference);
+                    mvtCmd.Parameters.AddWithValue("@motif", (object?)(ligne.Motif ?? dto.Motif) ?? DBNull.Value);
+                    mvtCmd.Parameters.AddWithValue("@lot", (object?)ligne.NumeroLot ?? DBNull.Value);
+                    mvtCmd.Parameters.AddWithValue("@serie", (object?)ligne.NumeroSerie ?? DBNull.Value);
+                    mvtCmd.Parameters.AddWithValue("@user", UserId);
+                    await mvtCmd.ExecuteNonQueryAsync();
+                }
+
+                documentLines.Add(new DocumentStockLineInput(
+                    article.Id,
+                    article.Code,
+                    article.Designation,
+                    dto.EmplacementSourceId,
+                    emplacementSourceCode,
+                    dto.EmplacementDestinationId,
+                    emplacementDestinationCode,
+                    ligne.Quantite,
+                    ligne.PrixUnitaire,
+                    ligne.Quantite * ligne.PrixUnitaire,
+                    ligne.NumeroLot,
+                    ligne.NumeroSerie,
+                    ligne.Motif ?? dto.Motif));
+            }
+
+            var motifDocument = string.IsNullOrWhiteSpace(dto.Demandeur)
+                ? dto.Motif
+                : string.IsNullOrWhiteSpace(dto.Motif)
+                    ? $"Demandeur: {dto.Demandeur}"
+                    : $"Demandeur: {dto.Demandeur}{Environment.NewLine}{dto.Motif}";
+
+            var documentId = await CreateDocumentStockAsync(
+                conn,
+                tx,
+                3,
+                dto.DateDocument == default ? DateTime.UtcNow : dto.DateDocument,
+                dto.Reference,
+                motifDocument,
+                UserId,
+                documentLines);
+
+            await tx.CommitAsync();
+
+            return Ok(new { succes = true, message = "Document de transfert enregistre.", data = documentId });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { succes = false, message = ex.Message });
+        }
+    }
+
     private static async Task<string> BuildStockInsertSqlAsync(SqlConnection conn, string stockTable, string emplacementParamName, SqlTransaction? tx = null)
     {
         if (!stockTable.Equals("Stocks", StringComparison.OrdinalIgnoreCase))

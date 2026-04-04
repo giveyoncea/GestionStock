@@ -17,6 +17,8 @@ public interface IApiService
     Task<DocumentStockDto?> GetDocumentStockAsync(Guid id);
     Task<ResultDto?> ValiderDocumentStockAsync(Guid id);
     Task<ResultDto?> CreerDocumentEntreeStockAsync(DocumentEntreeStockRequest dto);
+    Task<ResultDto?> CreerDocumentSortieStockAsync(DocumentSortieStockRequest dto);
+    Task<ResultDto?> CreerDocumentTransfertStockAsync(DocumentTransfertStockRequest dto);
     Task<ResultDto?> EntreeStockAsync(EntreeStockDto dto);
     Task<ResultDto?> SortieStockAsync(SortieStockDto dto);
     Task<PagedResult<FournisseurDto>?> GetFournisseursAsync(int page = 1, int pageSize = 20, string? search = null);

@@ -2,163 +2,509 @@
 @attribute [Authorize]
 @inject IApiService Api
 @inject NavigationManager Nav
+@inject ICurrencyService Devise
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Transfert de stock - GestionStock</PageTitle>
 
-<div class="stock-operation-page">
-    <div class="page-header">
-        <div>
-            <h1 class="page-title">Transfert de stock</h1>
-            <p class="page-subtitle">Deplacez un article d'un emplacement a un autre dans un ecran dedie.</p>
-        </div>
-        <button class="btn btn-secondary" @onclick="RetourListe">Retour aux stocks</button>
-    </div>
+<HeadContent>
+    <link rel="stylesheet" href="/css/stock-transfert-window.css?v=20260403c" />
+</HeadContent>
 
-    <section class="surface-hero surface-hero--compact stock-operation-hero">
-        <div class="surface-hero-copy">
-            <span class="surface-hero-eyebrow">Mouvement interne</span>
-            <h2>Transferez un stock entre emplacements sans perdre la trace du lot.</h2>
-            <p>Choisissez clairement la source, la destination et la quantite afin de fiabiliser les mouvements internes.</p>
-        </div>
-        <div class="surface-hero-pills">
-            <span class="surface-pill">Source</span>
-            <span class="surface-pill">Destination</span>
-            <span class="surface-pill">Quantite</span>
-        </div>
-    </section>
+<div class="stock-transfer-page">
+    <div class="stock-transfer-page__overlay"></div>
 
-    @if (!string.IsNullOrWhiteSpace(message))
-    {
-        <div class="@msgCls">@message</div>
-    }
+    <section id="stock-transfer-window"
+             class="stock-transfer-window @(isMaximized ? "stock-transfer-window--maximized workspace-window--maximized" : null) @(isMinimized ? "stock-transfer-window--minimized" : null)">
+        <header id="stock-transfer-header"
+                class="stock-transfer-window__header @(isMaximized ? null : "stock-transfer-window__header--draggable")">
+            <div class="stock-transfer-window__heading">
+                <div class="stock-transfer-window__breadcrumb">Stocks / Nouveau document / Transfert</div>
+                <h1 class="stock-transfer-window__title">Document de transfert de stock</h1>
+                <p class="stock-transfer-window__subtitle">Preparez un document multi-lignes pour deplacer proprement le stock entre deux emplacements.</p>
+            </div>
 
-    @if (chargement)
-    {
-        <div class="loading-state"><div class="spinner-lg"></div></div>
-    }
-    else
-    {
-        <section class="editor-shell">
-            <div class="editor-card">
-                <div class="editor-section">
-                    <div class="form-section-title">Transfert</div>
-                    <div class="editor-grid">
-                        <div class="field-group editor-span-2">
-                            <label class="field-label">Article *</label>
-                            <select class="field-input" @bind="selectedArticleId">
-                                <option value="@Guid.Empty">Selectionner</option>
-                                @foreach (var s in stocks)
+            <div class="stock-transfer-window__controls">
+                <button type="button"
+                        class="stock-window-btn"
+                        title="Reduire"
+                        aria-label="Reduire"
+                        @onclick="BasculerReduction">
+                    Reduire
+                </button>
+                <button type="button"
+                        class="stock-window-btn"
+                        title="@(isMaximized ? "Restaurer" : "Agrandir")"
+                        aria-label="@(isMaximized ? "Restaurer" : "Agrandir")"
+                        @onclick="BasculerAgrandissement">
+                    @(isMaximized ? "Restaurer" : "Agrandir")
+                </button>
+                <button type="button"
+                        class="stock-window-btn stock-window-btn--danger"
+                        title="Fermer"
+                        aria-label="Fermer"
+                        @onclick="Fermer">
+                    Fermer
+                </button>
+            </div>
+        </header>
+
+        <div class="stock-transfer-window__body" style="display:@(isMinimized ? "none" : "block");">
+            <section class="surface-hero surface-hero--compact stock-operation-hero">
+                <div class="surface-hero-copy">
+                    <span class="surface-hero-eyebrow">Document de transfert</span>
+                    <h2>Centralisez un mouvement inter-emplacements dans une fiche claire avec entete et lignes.</h2>
+                    <p>Les emplacements, le demandeur et le motif appartiennent au document. Les lignes precisent ensuite les articles, les quantites et leur valorisation.</p>
+                </div>
+                <div class="surface-hero-pills">
+                    <span class="surface-pill">Entete</span>
+                    <span class="surface-pill">Lignes</span>
+                    <span class="surface-pill">Lots</span>
+                    <span class="surface-pill">Series</span>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="@msgCls">@message</div>
+            }
+
+            @if (chargement)
+            {
+                <div class="loading-state"><div class="spinner-lg"></div></div>
+            }
+            else
+            {
+                <section class="editor-shell stock-document-transfer-shell">
+                    <div class="editor-card stock-document-transfer-card">
+                        <div class="editor-section">
+                            <div class="form-section-title">Entete du document</div>
+                            <div class="editor-grid stock-document-transfer-header-grid">
+                                <div class="field-group">
+                                    <label class="field-label">Date du document *</label>
+                                    <input class="field-input" type="date" @bind="dateDocument" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Reference *</label>
+                                    <input class="field-input" @bind="reference" placeholder="TRF-2026-0001" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Demandeur</label>
+                                    <input class="field-input" @bind="demandeur" placeholder="Nom ou service demandeur" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Emplacement source *</label>
+                                    <select class="field-input" @bind="emplacementSourceId">
+                                        <option value="@Guid.Empty">Selectionner</option>
+                                        @foreach (var e in emplacements)
+                                        {
+                                            <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Emplacement destination *</label>
+                                    <select class="field-input" @bind="emplacementDestinationId">
+                                        <option value="@Guid.Empty">Selectionner</option>
+                                        @foreach (var e in emplacements)
+                                        {
+                                            <option value="@e.Id">[@e.Zone] @e.Code</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="field-group editor-span-3">
+                                    <label class="field-label">Motif general</label>
+                                    <input class="field-input" @bind="motifDocument" placeholder="Reequilibrage, retour atelier, transfert interne..." />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="editor-section">
+                            <div class="stock-document-transfer-title-row">
+                                <div>
+                                    <div class="form-section-title">Ajouter une ligne</div>
+                                    <p class="stock-document-transfer-help">Chaque ligne sera deplacee du meme emplacement source vers le meme emplacement destination.</p>
+                                </div>
+                            </div>
+
+                            <div class="editor-grid stock-document-transfer-grid">
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Article *</label>
+                                    <select class="field-input" @bind="draft.ArticleId" @bind:after="OnDraftArticleChanged">
+                                        <option value="@Guid.Empty">Selectionner</option>
+                                        @foreach (var article in articles)
+                                        {
+                                            <option value="@article.Id">[@article.Code] @article.Designation</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Quantite *</label>
+                                    <input class="field-input" type="number" min="1" @bind="draft.Quantite" disabled="@DraftArticleSerialise" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">@($"Prix unitaire ({Devise.Symbol})")</label>
+                                    <input class="field-input" type="number" step="@Devise.AmountStep" min="0" @bind="draft.PrixUnitaire" />
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">No lot</label>
+                                    <input class="field-input" @bind="draft.NumeroLot" />
+                                </div>
+                                @if (DraftArticleSerialise)
                                 {
-                                    <option value="@s.ArticleId">[@s.ArticleCode] @s.ArticleDesignation</option>
+                                    <div class="field-group">
+                                        <label class="field-label">No serie *</label>
+                                        <input class="field-input" @bind="draft.NumeroSerie" placeholder="SN-000001" />
+                                    </div>
                                 }
-                            </select>
+                                <div class="field-group editor-span-2">
+                                    <label class="field-label">Motif de ligne</label>
+                                    <input class="field-input" @bind="draft.Motif" placeholder="Optionnel si le motif general suffit" />
+                                </div>
+                            </div>
+
+                            <div class="stock-document-transfer-line-actions">
+                                <button class="btn btn-secondary" type="button" @onclick="ReinitialiserDraft">Reinitialiser la ligne</button>
+                                <button class="btn btn-primary" type="button" @onclick="AjouterLigne">Ajouter la ligne</button>
+                            </div>
                         </div>
-                        <div class="field-group">
-                            <label class="field-label">Emplacement source *</label>
-                            <select class="field-input" @bind="emplacementSourceId">
-                                <option value="@Guid.Empty">Selectionner</option>
-                                @foreach (var e in emplacements)
-                                {
-                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="field-group">
-                            <label class="field-label">Emplacement destination *</label>
-                            <select class="field-input" @bind="emplacementDestId">
-                                <option value="@Guid.Empty">Selectionner</option>
-                                @foreach (var e in emplacements)
-                                {
-                                    <option value="@e.Id">[@e.Zone] @e.Code</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="field-group">
-                            <label class="field-label">Quantite *</label>
-                            <input class="field-input" type="number" min="1" @bind="quantite" />
-                        </div>
-                        <div class="field-group">
-                            <label class="field-label">No lot</label>
-                            <input class="field-input" @bind="numeroLot" />
+
+                        <div class="editor-section">
+                            <div class="stock-document-transfer-title-row">
+                                <div>
+                                    <div class="form-section-title">Lignes du document</div>
+                                    <p class="stock-document-transfer-help">@lignes.Count ligne(s) pretes a etre transferees.</p>
+                                </div>
+                                <div class="stock-document-transfer-summary">
+                                    <span><strong>@lignes.Sum(l => l.Quantite)</strong> unite(s)</span>
+                                    <span><strong>@Devise.FormatAmount(lignes.Sum(l => l.Quantite * l.PrixUnitaire))</strong></span>
+                                </div>
+                            </div>
+
+                            @if (lignes.Count == 0)
+                            {
+                                <div class="empty-state">Ajoutez au moins une ligne pour creer le document de transfert.</div>
+                            }
+                            else
+                            {
+                                <div class="table-container">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Article</th>
+                                                <th class="text-right">Quantite</th>
+                                                <th class="text-right">PU</th>
+                                                <th class="text-right">Total</th>
+                                                <th>Lot / Serie</th>
+                                                <th>Motif</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var ligne in lignes.Select((value, index) => new { value, index }))
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <div class="cell-main">@ligne.value.ArticleDesignation</div>
+                                                        <div class="cell-sub"><code>@ligne.value.ArticleCode</code></div>
+                                                    </td>
+                                                    <td class="text-right mono">@ligne.value.Quantite</td>
+                                                    <td class="text-right mono">@Devise.FormatAmount(ligne.value.PrixUnitaire)</td>
+                                                    <td class="text-right mono">@Devise.FormatAmount(ligne.value.Quantite * ligne.value.PrixUnitaire)</td>
+                                                    <td class="text-muted small">@FormatLotSerie(ligne.value)</td>
+                                                    <td class="text-muted small">@(string.IsNullOrWhiteSpace(ligne.value.Motif) ? "-" : ligne.value.Motif)</td>
+                                                    <td class="text-right">
+                                                        <button class="btn-row-action btn-row-action--danger" type="button" @onclick="() => SupprimerLigne(ligne.index)">Retirer</button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <aside class="editor-side">
-                <div class="editor-side-card">
-                    <h3>Reperes</h3>
-                    <ul class="editor-hints">
-                        <li>La source et la destination doivent etre differentes.</li>
-                        <li>Le transfert n'impacte pas la valeur globale du stock.</li>
-                    </ul>
-                </div>
-            </aside>
-        </section>
+                    <aside class="editor-side">
+                        <div class="editor-side-card">
+                            <h3>Reperes</h3>
+                            <ul class="editor-hints">
+                                <li>Le document impose un seul emplacement source et un seul emplacement destination.</li>
+                                <li>La source et la destination doivent etre differentes.</li>
+                                <li>Un article sans suivi de stock ne doit pas etre ajoute ici.</li>
+                                <li>Pour un article serialise, la quantite est forcee a 1 et le numero de serie devient obligatoire.</li>
+                            </ul>
+                        </div>
+                    </aside>
+                </section>
 
-        <div class="editor-footer">
-            <div></div>
-            <div class="editor-footer-actions">
-                <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
-                <button class="btn btn-primary" @onclick="Enregistrer" disabled="@saving">@(saving ? "Enregistrement..." : "Transferer")</button>
-            </div>
+                <div class="editor-footer">
+                    <div></div>
+                    <div class="editor-footer-actions">
+                        <button class="btn btn-secondary" @onclick="RetourListe" disabled="@saving">Annuler</button>
+                        <button class="btn btn-primary" @onclick="EnregistrerDocument" disabled="@saving">@(saving ? "Enregistrement..." : "Enregistrer le document")</button>
+                    </div>
+                </div>
+            }
         </div>
-    }
+    </section>
 </div>
 
 @code {
-    private List<StockResumeDto> stocks = new();
+    private sealed class TransfertDraft
+    {
+        public Guid ArticleId { get; set; }
+        public int Quantite { get; set; } = 1;
+        public decimal PrixUnitaire { get; set; }
+        public string? NumeroLot { get; set; }
+        public string? NumeroSerie { get; set; }
+        public string? Motif { get; set; }
+    }
+
+    private sealed class TransfertLineVm
+    {
+        public Guid ArticleId { get; init; }
+        public string ArticleCode { get; init; } = string.Empty;
+        public string ArticleDesignation { get; init; } = string.Empty;
+        public int Quantite { get; init; }
+        public decimal PrixUnitaire { get; init; }
+        public string? NumeroLot { get; init; }
+        public string? NumeroSerie { get; init; }
+        public string? Motif { get; init; }
+    }
+
+    private readonly List<TransfertLineVm> lignes = new();
+    private readonly TransfertDraft draft = new();
+    private List<ArticleDto> articles = new();
     private List<EmplacementDto> emplacements = new();
     private bool chargement = true;
     private bool saving;
+    private bool isMaximized;
+    private bool isMinimized;
+    private bool jsReady;
     private string? message;
     private string msgCls = "alert-success";
-
-    private Guid selectedArticleId = Guid.Empty;
+    private DateTime dateDocument = DateTime.Today;
+    private string reference = $"TRF-{DateTime.Today:yyyyMMdd-HHmm}";
     private Guid emplacementSourceId = Guid.Empty;
-    private Guid emplacementDestId = Guid.Empty;
-    private int quantite = 1;
-    private string? numeroLot;
+    private Guid emplacementDestinationId = Guid.Empty;
+    private string? demandeur;
+    private string? motifDocument;
+    private ArticleDto? draftArticle;
+    private IJSObjectReference? stockTransferWindowModule;
+
+    private bool DraftArticleSerialise => draftArticle?.GestionNumeroDeSerie == true;
 
     protected override async Task OnInitializedAsync()
     {
+        await Devise.EnsureLoadedAsync();
         await Charger();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || jsReady)
+            return;
+
+        var module = await EnsureStockTransferWindowModuleAsync();
+        await module.InvokeVoidAsync("initializeFloatingWindow", "stock-transfer-window", "stock-transfer-header");
+        jsReady = true;
     }
 
     private async Task Charger()
     {
         chargement = true;
-        stocks = (await Api.GetStocksResumeAsync())?.ToList() ?? new();
-        emplacements = (await Api.GetEmplacementsAsync()) ?? new();
+
+        var articlesTask = Api.GetArticlesAsync(1, 500, null, null);
+        var emplacementsTask = Api.GetEmplacementsAsync();
+        await Task.WhenAll(articlesTask, emplacementsTask);
+
+        articles = ((await articlesTask)?.Items ?? Enumerable.Empty<ArticleDto>())
+            .Where(a => !a.SansSuiviStock)
+            .OrderBy(a => a.Designation)
+            .ToList();
+
+        emplacements = (await emplacementsTask) ?? new();
         chargement = false;
     }
 
     private void RetourListe() => Nav.NavigateTo("/stocks");
 
-    private async Task Enregistrer()
+    private void Fermer() => Nav.NavigateTo("/stocks");
+
+    private void BasculerReduction()
     {
-        if (selectedArticleId == Guid.Empty || emplacementSourceId == Guid.Empty || emplacementDestId == Guid.Empty || quantite <= 0)
+        isMinimized = !isMinimized;
+    }
+
+    private async Task BasculerAgrandissement()
+    {
+        isMaximized = !isMaximized;
+        if (isMaximized)
+        {
+            isMinimized = false;
+        }
+
+        if (stockTransferWindowModule is not null)
+        {
+            await stockTransferWindowModule.InvokeVoidAsync("setWindowMaximized", "stock-transfer-window", isMaximized);
+        }
+    }
+
+    private Task OnDraftArticleChanged()
+    {
+        draftArticle = articles.FirstOrDefault(a => a.Id == draft.ArticleId);
+
+        if (DraftArticleSerialise)
+        {
+            draft.Quantite = 1;
+        }
+        else
+        {
+            draft.NumeroSerie = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ReinitialiserDraft()
+    {
+        draft.ArticleId = Guid.Empty;
+        draft.Quantite = 1;
+        draft.PrixUnitaire = 0;
+        draft.NumeroLot = null;
+        draft.NumeroSerie = null;
+        draft.Motif = null;
+        draftArticle = null;
+        message = null;
+    }
+
+    private Task AjouterLigne()
+    {
+        var article = articles.FirstOrDefault(a => a.Id == draft.ArticleId);
+
+        if (emplacementSourceId == Guid.Empty || emplacementDestinationId == Guid.Empty)
         {
             msgCls = "alert-error";
-            message = "Renseignez les champs obligatoires avant d'enregistrer.";
+            message = "Renseignez les emplacements source et destination avant d'ajouter des lignes.";
+            return Task.CompletedTask;
+        }
+
+        if (emplacementSourceId == emplacementDestinationId)
+        {
+            msgCls = "alert-error";
+            message = "La source et la destination doivent etre differentes.";
+            return Task.CompletedTask;
+        }
+
+        if (article is null)
+        {
+            msgCls = "alert-error";
+            message = "Selectionnez un article valide avant d'ajouter la ligne.";
+            return Task.CompletedTask;
+        }
+
+        if (draft.Quantite <= 0)
+        {
+            msgCls = "alert-error";
+            message = "La quantite de la ligne doit etre superieure a zero.";
+            return Task.CompletedTask;
+        }
+
+        if (article.GestionNumeroDeSerie)
+        {
+            if (draft.Quantite != 1)
+            {
+                msgCls = "alert-error";
+                message = "Un article serialise doit etre saisi avec une quantite egale a 1.";
+                return Task.CompletedTask;
+            }
+
+            if (string.IsNullOrWhiteSpace(draft.NumeroSerie))
+            {
+                msgCls = "alert-error";
+                message = "Le numero de serie est obligatoire pour cet article.";
+                return Task.CompletedTask;
+            }
+        }
+
+        lignes.Add(new TransfertLineVm
+        {
+            ArticleId = article.Id,
+            ArticleCode = article.Code,
+            ArticleDesignation = article.Designation,
+            Quantite = draft.Quantite,
+            PrixUnitaire = draft.PrixUnitaire,
+            NumeroLot = draft.NumeroLot,
+            NumeroSerie = draft.NumeroSerie,
+            Motif = draft.Motif
+        });
+
+        msgCls = "alert-success";
+        message = "Ligne ajoutee au document.";
+        ReinitialiserDraft();
+        return Task.CompletedTask;
+    }
+
+    private void SupprimerLigne(int index)
+    {
+        if (index < 0 || index >= lignes.Count)
+            return;
+
+        lignes.RemoveAt(index);
+        message = lignes.Count == 0 ? "La ligne a ete retiree du document." : "Ligne retiree du document.";
+        msgCls = "alert-success";
+    }
+
+    private async Task EnregistrerDocument()
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            msgCls = "alert-error";
+            message = "La reference du document est obligatoire.";
             return;
         }
 
-        if (emplacementSourceId == emplacementDestId)
+        if (emplacementSourceId == Guid.Empty || emplacementDestinationId == Guid.Empty)
+        {
+            msgCls = "alert-error";
+            message = "Les emplacements source et destination sont obligatoires.";
+            return;
+        }
+
+        if (emplacementSourceId == emplacementDestinationId)
         {
             msgCls = "alert-error";
             message = "La source et la destination doivent etre differentes.";
             return;
         }
 
-        saving = true;
-        var result = await Api.TransfertStockAsync(new TransfertRequest
+        if (lignes.Count == 0)
         {
-            ArticleId = selectedArticleId,
+            msgCls = "alert-error";
+            message = "Ajoutez au moins une ligne avant d'enregistrer le document.";
+            return;
+        }
+
+        saving = true;
+        var result = await Api.CreerDocumentTransfertStockAsync(new DocumentTransfertStockRequest
+        {
+            DateDocument = dateDocument,
+            Reference = reference,
             EmplacementSourceId = emplacementSourceId,
-            EmplacementDestinationId = emplacementDestId,
-            Quantite = quantite,
-            NumeroLot = numeroLot
+            EmplacementDestinationId = emplacementDestinationId,
+            Demandeur = demandeur,
+            Motif = motifDocument,
+            Lignes = lignes.Select(l => new LigneDocumentTransfertStockRequest
+            {
+                ArticleId = l.ArticleId,
+                Quantite = l.Quantite,
+                PrixUnitaire = l.PrixUnitaire,
+                NumeroLot = l.NumeroLot,
+                NumeroSerie = l.NumeroSerie,
+                Motif = l.Motif
+            }).ToList()
         });
         saving = false;
 
@@ -167,6 +513,35 @@
         if (result?.Succes == true)
         {
             Nav.NavigateTo("/stocks");
+        }
+    }
+
+    private static string FormatLotSerie(TransfertLineVm ligne)
+    {
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroSerie))
+            return $"Serie: {ligne.NumeroSerie}";
+        if (!string.IsNullOrWhiteSpace(ligne.NumeroLot))
+            return $"Lot: {ligne.NumeroLot}";
+        return "-";
+    }
+
+    private async Task<IJSObjectReference> EnsureStockTransferWindowModuleAsync()
+    {
+        stockTransferWindowModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/windowing.js");
+        return stockTransferWindowModule;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (stockTransferWindowModule is not null)
+        {
+            try
+            {
+                await stockTransferWindowModule.DisposeAsync();
+            }
+            catch
+            {
+            }
         }
     }
 }
